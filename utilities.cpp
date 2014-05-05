@@ -8,7 +8,7 @@
 
 int main(int argc, char const *argv[])
 {
-  read_problem("iris_3");
+  read_problem("iris_scale");
   return 0;
 }
 
@@ -16,7 +16,7 @@ void read_problem(const char *filename)
 {
   std::string line;
   std::ifstream file(filename);
-  int elements, max_index, inst_max_index;
+  int elements, max_index, inst_max_index, j;
   problem prob;
 
   if (!file.is_open()) {
@@ -57,20 +57,40 @@ void read_problem(const char *filename)
     }
     catch(std::exception& e)
     {
-      std::cerr << "Error: " << e.what() << std::endl;
+      std::cerr << "Error: " << e.what() << " in line " << (i+1) << std::endl;
+      // TODO add memory release schema
       exit(EXIT_FAILURE);
-    }
+    }  // TODO try not to use exception
 
     elements = tokens.size();
     prob.x[i] = new node[elements];
     prev = 0;
-    for (int j = 0; j < elements-1; ++j) {
+    for (j = 0; j < elements-1; ++j) {
       pos = tokens[j+1].find_first_of(':');
-      prob.x[i][j].index = stoi(tokens[j+1].substr(prev, pos-prev));
-      prob.x[i][j].value = stod(tokens[j+1].substr(pos+1));
-      std::cout << prob.x[i][j].index << ' ' << prob.x[i][j].value << std::endl;
+      try
+      {
+        prob.x[i][j].index = stoi(tokens[j+1].substr(prev, pos-prev));
+        prob.x[i][j].value = stod(tokens[j+1].substr(pos+1));
+      }
+      catch(std::exception& e)
+      {
+        std::cerr << "Error: " << e.what() << " in line " << (i+1) << std::endl;
+        // TODO add memory release schema
+        exit(EXIT_FAILURE);
+      }
+      inst_max_index = prob.x[i][j].index;
     }
+
+    if (inst_max_index > max_index) {
+      max_index = inst_max_index;
+    }
+    prob.x[i][j].index = -1;
+    prob.x[i][j].value = 0;
   }
+
+  prob.max_index = max_index;
+
+  // TODO add precomputed kernel check
 
   file.close();
 }

@@ -1,20 +1,20 @@
 #ifndef LIBVM_UTILITIES_H_
 #define LIBVM_UTILITIES_H_
 
-struct node
+struct Node
 {
   int index;
   double value;
 };
 
-struct problem
+struct Problem
 {
-  int l;
+  int l;  // number of examples
   int max_index;
   double *y;
-  struct node **x;
+  struct Node **x;
 };
 
-void read_problem(const char *filename);
+struct Problem *ReadProblem(const char *file_name);
 
 #endif  // LIBVM_UTILITIES_H_

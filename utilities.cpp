@@ -6,43 +6,37 @@
 #include <cmath>
 #include <exception>
 
-int main(int argc, char const *argv[])
-{
-  read_problem("iris_scale");
-  return 0;
-}
-
-void read_problem(const char *filename)
+struct Problem *ReadProblem(const char *file_name)
 {
   std::string line;
-  std::ifstream file(filename);
-  int elements, max_index, inst_max_index, j;
-  problem prob;
+  std::ifstream input_file(file_name);
+  int elements, max_index, current_max_index;
+  Problem *problem = new Problem;
 
-  if (!file.is_open()) {
-    std::cerr << "Unable to open input file " << filename << std::endl;
+  if (!input_file.is_open()) {
+    std::cerr << "Unable to open input file: " << file_name << std::endl;
     exit(EXIT_FAILURE);
   }
 
-  prob.l = 0;
+  problem->l = 0;
   elements = 0;
 
-  while (std::getline(file, line)) {
-    ++prob.l;
+  while (std::getline(input_file, line)) {
+    ++problem->l;
   }
-  file.clear();
-  file.seekg(0);
+  input_file.clear();
+  input_file.seekg(0);
 
-  prob.y = new double[prob.l];
-  prob.x = new node*[prob.l];
+  problem->y = new double[problem->l];
+  problem->x = new Node*[problem->l];
 
   max_index = 0;
-  for (int i = 0; i < prob.l; ++i) {
+  for (int i = 0; i < problem->l; ++i) {
     std::vector<std::string> tokens;
-
-    inst_max_index = -1;
-    std::getline(file, line);
     std::size_t prev = 0, pos;
+
+    current_max_index = -1;
+    std::getline(input_file, line);
     while ((pos = line.find_first_of(" \t\n", prev)) != std::string::npos) {
       if (pos > prev)
         tokens.push_back(line.substr(prev, pos-prev));
@@ -53,44 +47,63 @@ void read_problem(const char *filename)
 
     try
     {
-      prob.y[i] = stod(tokens[0]);
+      problem->y[i] = std::stod(tokens[0]);
     }
     catch(std::exception& e)
     {
       std::cerr << "Error: " << e.what() << " in line " << (i+1) << std::endl;
-      // TODO add memory release schema
+      delete[] problem->y;
+      for (int j = 0; j < i; ++j) {
+        delete[] problem->x[j];
+      }
+      delete[] problem->x;
+      std::vector<std::string>(tokens).swap(tokens);
       exit(EXIT_FAILURE);
     }  // TODO try not to use exception
 
     elements = tokens.size();
-    prob.x[i] = new node[elements];
+    problem->x[i] = new Node[elements];
     prev = 0;
-    for (j = 0; j < elements-1; ++j) {
+    for (int j = 0; j < elements-1; ++j) {
       pos = tokens[j+1].find_first_of(':');
       try
       {
-        prob.x[i][j].index = stoi(tokens[j+1].substr(prev, pos-prev));
-        prob.x[i][j].value = stod(tokens[j+1].substr(pos+1));
+        std::size_t end;
+
+        problem->x[i][j].index = std::stoi(tokens[j+1].substr(prev, pos-prev), &end);
+        if (end != (tokens[j+1].substr(prev, pos-prev)).length()) {
+          throw std::invalid_argument("incomplete convention");
+        }
+        problem->x[i][j].value = std::stod(tokens[j+1].substr(pos+1), &end);
+        if (end != (tokens[j+1].substr(pos+1)).length()) {
+          throw std::invalid_argument("incomplete convention");
+        }
       }
       catch(std::exception& e)
       {
         std::cerr << "Error: " << e.what() << " in line " << (i+1) << std::endl;
-        // TODO add memory release schema
+        delete[] problem->y;
+        for (int j = 0; j < i+1; ++j) {
+          delete[] problem->x[j];
+        }
+        delete[] problem->x;
+        std::vector<std::string>(tokens).swap(tokens);
         exit(EXIT_FAILURE);
       }
-      inst_max_index = prob.x[i][j].index;
+      current_max_index = problem->x[i][j].index;
     }
 
-    if (inst_max_index > max_index) {
-      max_index = inst_max_index;
+    if (current_max_index > max_index) {
+      max_index = current_max_index;
     }
-    prob.x[i][j].index = -1;
-    prob.x[i][j].value = 0;
+    problem->x[i][elements-1].index = -1;
+    problem->x[i][elements-1].value = 0;
   }
 
-  prob.max_index = max_index;
+  problem->max_index = max_index;
 
   // TODO add precomputed kernel check
 
-  file.close();
+  input_file.close();
+  return problem;
 }

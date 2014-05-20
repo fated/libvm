@@ -6,11 +6,6 @@
 #include <cmath>
 #include <exception>
 
-void test()
-{
-  std::cout << "done" << std::endl;
-}
-
 struct Problem *ReadProblem(const char *file_name)
 {
   std::string line;

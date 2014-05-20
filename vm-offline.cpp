@@ -22,6 +22,11 @@ int main(int argc, char *argv[])
 
   std::ofstream output_file(output_file_name);
 
+  if (!output_file.is_open()) {
+    std::cerr << "Unable to open output file: " << output_file_name << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
   for (int i = 0; i < test->l; ++i) {
     double predict_label;
 

@@ -1,36 +1,10 @@
 #include "utilities.h"
+#include "knn.h"
 #include <iostream>
 #include <fstream>
-#include <string>
-#include <cmath>
-#include <vector>
-#include <map>
-
-template<class T>
-T FindMostFrequent(T *array, int size)
-{
-  std::vector<T> v(array, array+size);
-  std::map<T, int> frequency_map;
-  int max_frequency = 0;
-  T most_frequent_element;
-
-  for (std::size_t i = 0; i != v.size(); ++i) {
-    int cur_frequency = ++frequency_map[v[i]];
-    if (cur_frequency > max_frequency) {
-        max_frequency = cur_frequency;
-        most_frequent_element = v[i];
-    }
-  }
-
-  return most_frequent_element;
-}
 
 void ExitWithHelp();
 void ParseCommandLine(int argc, char *argv[], char *train_file_name, char *test_file_name, char *output_file_name);
-double KNN(struct Problem *train, struct Node *x, const int num_neighbors);
-double CalcDist(struct Node *x1, struct Node *x2);
-int CompareDist(double *neighbors, double dist, int num_neighbors);
-void InsertLabel(double *labels, double label, int num_neighbors, int index);
 
 int num_neighbors = 1;
 
@@ -107,77 +81,6 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
     }
     sprintf(output_file_name, "%s_output", p);
   }
-
-  return;
-}
-
-double KNN(struct Problem *train, struct Node *x, const int num_neighbors)
-{
-  double neighbors[num_neighbors];
-  double labels[num_neighbors];
-
-  for (int i = 0; i < num_neighbors; ++i) {
-    neighbors[i] = -1;
-    labels[i] = 0;
-  }
-  for (int i = 0; i < train->l; ++i) {
-    double dist = CalcDist(train->x[i], x);
-    int index = CompareDist(neighbors, dist, num_neighbors);
-    if (index < num_neighbors) {
-      InsertLabel(labels, train->y[i], num_neighbors, index);
-    }
-  }
-  double predict_label = FindMostFrequent(labels, num_neighbors);
-
-  return predict_label;
-}
-
-double CalcDist(struct Node *x1, struct Node *x2)
-{
-  double sum = 0;
-
-  while (x1->index != -1 && x2->index != -1) {
-    if (x1->index == x2->index) {
-      sum += (x1->value - x2->value) * (x1->value - x2->value);
-      ++x1;
-      ++x2;
-    } else {
-      if(x1->index > x2->index) {
-        sum += x2->value * x2->value;
-        ++x2;
-      } else {
-        sum += x1->value * x1->value;
-        ++x1;
-      }
-    }
-  }
-
-  return sqrt(sum);
-}
-
-int CompareDist(double *neighbors, double dist, int num_neighbors)
-{
-  int i = 0;
-
-  while (i < num_neighbors) {
-    if (dist < neighbors[i] || neighbors[i] == -1)
-      break;
-    ++i;
-  }
-  if (i == num_neighbors)
-    return i;
-  for (int j = num_neighbors-1; j > i; --j)
-    neighbors[j] = neighbors[j-1];
-  neighbors[i] = dist;
-
-  return i;
-}
-
-void InsertLabel(double *labels, double label, int num_neighbors, int index)
-{
-  for (int i = num_neighbors-1; i > index; --i)
-    labels[i] = labels[i-1];
-  labels[index] = label;
 
   return;
 }

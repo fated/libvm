@@ -6,11 +6,17 @@
 #include <cmath>
 #include <exception>
 
+void test()
+{
+  std::cout << "done" << std::endl;
+}
+
 struct Problem *ReadProblem(const char *file_name)
 {
   std::string line;
   std::ifstream input_file(file_name);
-  int elements, max_index, current_max_index;
+  int max_index, current_max_index;
+  std::size_t elements;
   Problem *problem = new Problem;
 
   if (!input_file.is_open()) {
@@ -64,7 +70,7 @@ struct Problem *ReadProblem(const char *file_name)
     elements = tokens.size();
     problem->x[i] = new Node[elements];
     prev = 0;
-    for (int j = 0; j < elements-1; ++j) {
+    for (std::size_t j = 0; j < elements-1; ++j) {
       pos = tokens[j+1].find_first_of(':');
       try
       {

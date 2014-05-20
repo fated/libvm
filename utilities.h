@@ -16,5 +16,6 @@ struct Problem
 };
 
 struct Problem *ReadProblem(const char *file_name);
+void test();
 
 #endif  // LIBVM_UTILITIES_H_

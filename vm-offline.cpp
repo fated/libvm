@@ -6,7 +6,7 @@
 void ExitWithHelp();
 void ParseCommandLine(int argc, char *argv[], char *train_file_name, char *test_file_name, char *output_file_name);
 
-int num_neighbors = 1;
+struct KNNParameter knn_parameter;
 
 int main(int argc, char *argv[])
 {
@@ -25,7 +25,7 @@ int main(int argc, char *argv[])
   for (int i = 0; i < test->l; ++i) {
     double predict_label;
 
-    predict_label = KNN(train, test->x[i], num_neighbors);
+    predict_label = KNN(train, test->x[i], knn_parameter.num_neighbors);
     output_file << predict_label << '\n';
     if (predict_label == test->y[i]) {
       ++num_correct;
@@ -51,6 +51,8 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
 {
   int i;
 
+  knn_parameter.num_neighbors = 1;
+
   for (i = 1; i < argc; ++i) {
     if (argv[i][0] != '-')
       break;
@@ -59,7 +61,7 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
     switch (argv[i][1]) {
       case 'k':
         ++i;
-        num_neighbors = atoi(argv[i]);
+        knn_parameter.num_neighbors = atoi(argv[i]);
         break;
       default:
         std::cout << "Unknown option: -" << argv[i][1] << std::endl;

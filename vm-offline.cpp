@@ -32,7 +32,7 @@ int main(int argc, char *argv[])
     }
   }
 
-  std::cout << num_correct << '/' << test->l << std::endl;
+  printf("%g%% (%d/%d) \n", 100.0*num_correct/test->l, num_correct, test->l);
   output_file.close();
 
   return 0;

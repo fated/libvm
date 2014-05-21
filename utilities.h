@@ -41,5 +41,6 @@ T FindMostFrequent(T *array, int size)
 }
 
 struct Problem *ReadProblem(const char *file_name);
+void FreeProblem(struct Problem *problem);
 
 #endif  // LIBVM_UTILITIES_H_

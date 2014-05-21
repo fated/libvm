@@ -15,7 +15,7 @@ struct Model
   struct Parameter param;
   int l;
   int num_classes;
-  int *label;
+  int *labels;
   int *category;
 
   double **minD;
@@ -28,5 +28,6 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
 
 int SaveModel(const char *model_file_name, const struct Model *model);
 // struct Model *LoadModel(const char *model_file_name);
+void FreeModel(struct Model *model);
 
 #endif  // LIBVM_VM_H_

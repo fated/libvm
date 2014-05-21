@@ -8,7 +8,7 @@ template <typename T, typename S> static inline void clone(T *&dest, S *src, int
 {
   dest = new T[size];
   if (sizeof(T) < sizeof(S))
-    std::cout << "WARNING: destination type is smaller than source type, data will be truncated." << std::endl;
+    std::cerr << "WARNING: destination type is smaller than source type, data will be truncated." << std::endl;
   std::copy(src, src+size, dest);
 }
 
@@ -20,30 +20,32 @@ struct Model *TrainVM(const struct Problem *train, const struct Parameter *param
   int l = train->l;
   int num_classes = 0;
   int num_neighbors = param->knn_param.num_neighbors;
-  int *label = NULL;
+  int *labels = NULL;
+  int *alter_labels = new int[l];
 
-  std::vector<int> unique_label;
+  std::vector<int> unique_labels;
   for (int i = 0; i < l; ++i) {
     int this_label = (int) train->y[i];
     std::size_t j;
     for (j = 0; j < num_classes; ++j) {
-      if (this_label == unique_label[j]) {
+      if (this_label == unique_labels[j]) {
         break;
       }
     }
+    alter_labels[i] = (int) j;
     if (j == num_classes) {
-      unique_label.push_back(this_label);
+      unique_labels.push_back(this_label);
       ++num_classes;
     }
   }
-  label = new int[num_classes];
-  for (std::size_t i = 0; i < unique_label.size(); ++i) {
-    label[i] = unique_label[i];
+  labels = new int[num_classes];
+  for (std::size_t i = 0; i < unique_labels.size(); ++i) {
+    labels[i] = unique_labels[i];
   }
-  std::vector<int>(unique_label).swap(unique_label);
+  std::vector<int>(unique_labels).swap(unique_labels);
 
   if (num_classes == 1)
-    std::cout << "WARNING: training set only has one class. See README for details." << std::endl;
+    std::cerr << "WARNING: training set only has one class. See README for details." << std::endl;
 
   int *category = new int[l];
   double **minD = new double*[l];
@@ -65,23 +67,11 @@ struct Model *TrainVM(const struct Problem *train, const struct Parameter *param
 
       int idx = CompareDist(minD[i], dist, num_neighbors);
       if (idx < num_neighbors) {
-        int k;
-        for (k = 0; k < num_classes; ++k) {
-          if (label[k] == train->y[j]) {
-            break;
-          }
-        }
-        InsertLabel(minL[i], k, num_neighbors, idx);
+        InsertLabel(minL[i], alter_labels[j], num_neighbors, idx);
       }
       idx = CompareDist(minD[j], dist, num_neighbors);
       if (idx < num_neighbors) {
-        int k;
-        for (k = 0; k < num_classes; ++k) {
-          if (label[k] == train->y[i]) {
-            break;
-          }
-        }
-        InsertLabel(minL[j], k, num_neighbors, idx);
+        InsertLabel(minL[j], alter_labels[i], num_neighbors, idx);
       }
     }
   }
@@ -107,10 +97,11 @@ struct Model *TrainVM(const struct Problem *train, const struct Parameter *param
     }
     delete[] voting;
   }
+  delete[] alter_labels;
 
   model->num_classes = num_classes;
   model->l = l;
-  model->label = label;
+  model->labels = labels;
   model->category = category;
   model->minD = minD;
   model->minL = minL;
@@ -125,14 +116,14 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
   int num_classes = model->num_classes;
   int num_neighbors = param.knn_param.num_neighbors;
   // int num_categories = num_classes;
-  int *label = model->label;
+  int *labels = model->labels;
   double predict_label;
 
   int **f_matrix = new int*[num_classes];
   double y;
 
   for (int i = 0; i < num_classes; ++i) {
-    y = label[i];
+    y = labels[i];
 
     int *category = new int[l+1];
     double **minD = new double*[l+1];
@@ -166,7 +157,7 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
       if (idx < num_neighbors) {
         int k;
         for (k = 0; k < num_classes; ++k)
-          if (label[k] == train->y[j])
+          if (labels[k] == train->y[j])
             break;
         InsertLabel(minL[l], k, num_neighbors, idx);
       }
@@ -195,7 +186,7 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
     for (int j = 0; j < l; ++j) {
       if (category[j] == category[l]) {
         for (int k = 0; k < num_classes; ++k) {
-          if (label[k] == train->y[j]) {
+          if (labels[k] == train->y[j]) {
             f_matrix[i][k]++;
             break;
           }
@@ -249,7 +240,7 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
     }
   }
 
-  predict_label = label[best];
+  predict_label = labels[best];
 
   delete[] quality;
   for (int i = 0; i < num_classes; ++i) {
@@ -271,3 +262,18 @@ int SaveModel(const char *model_file_name, const struct Model *model)
 // {
 
 // }
+
+void FreeModel(struct Model *model)
+{
+  delete[] model->labels;
+  delete[] model->category;
+
+  for (int i = 0; i < model->l; ++i) {
+    delete[] model->minD[i];
+    delete[] model->minL[i];
+  }
+  delete[] model->minD;
+  delete[] model->minL;
+
+  return;
+}

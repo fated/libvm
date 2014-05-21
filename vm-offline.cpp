@@ -11,12 +11,13 @@ struct Parameter param;
 
 int main(int argc, char *argv[])
 {
-  char train_file_name[1024];
-  char test_file_name[1024];
-  char output_file_name[1024];
+  char train_file_name[256];
+  char test_file_name[256];
+  char output_file_name[256];
   struct Problem *train, *test;
   struct Model *model;
   int num_correct = 0;
+  double avg_lower_bound = 0, avg_upper_bound = 0;
 
   ParseCommandLine(argc, argv, train_file_name, test_file_name, output_file_name);
   train = ReadProblem(train_file_name);
@@ -32,19 +33,27 @@ int main(int argc, char *argv[])
   model = TrainVM(train, &param);
 
   for (int i = 0; i < test->l; ++i) {
-    double predict_label, lower, upper;
+    double predict_label, lower_bound, upper_bound;
 
-    predict_label = PredictVM(train, model, test->x[i], lower, upper);
+    predict_label = PredictVM(train, model, test->x[i], lower_bound, upper_bound);
+    avg_lower_bound += lower_bound;
+    avg_upper_bound += upper_bound;
 
-    output_file << predict_label << ' ' << lower << ' ' << upper << '\n';
+    output_file << predict_label << ' ' << lower_bound << ' ' << upper_bound << '\n';
     if (predict_label == test->y[i]) {
       ++num_correct;
     }
   }
+  avg_lower_bound /= test->l;
+  avg_upper_bound /= test->l;
 
-  printf("%g%% (%d/%d) \n", 100.0*num_correct/test->l, num_correct, test->l);
+  printf("%g%% (%d/%d) [%.3f%%, %.3f%%]\n", 100.0*num_correct/test->l, num_correct, test->l,
+      100*avg_lower_bound, 100*avg_upper_bound);
   output_file.close();
 
+  FreeProblem(train);
+  FreeProblem(test);
+  FreeModel(model);
   return 0;
 }
 
@@ -52,8 +61,7 @@ void ExitWithHelp()
 {
   std::cout << "Usage: vm-offline [options] train_file test_file [output_file]\n"
             << "options:\n"
-            << "  -k num_neighbors : set number of neighbors in kNN (default 1)"
-            << std::endl;
+            << "  -k num_neighbors : set number of neighbors in kNN (default 1)\n";
   exit(EXIT_FAILURE);
 }
 
@@ -74,7 +82,7 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
         param.knn_param.num_neighbors = atoi(argv[i]);
         break;
       default:
-        std::cout << "Unknown option: -" << argv[i][1] << std::endl;
+        std::cerr << "Unknown option: -" << argv[i][1] << std::endl;
         ExitWithHelp();
     }
   }

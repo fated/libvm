@@ -4,6 +4,9 @@
 #include <vector>
 #include <map>
 
+#define INF HUGE_VAL
+#define TAU 1e-12
+
 struct Node
 {
   int index;

@@ -4,9 +4,6 @@
 #include <iostream>
 #include <cmath>
 
-#define INF HUGE_VAL
-#define TAU 1e-12
-
 template <typename T, typename S> static inline void clone(T *&dest, S *src, int size)
 {
   dest = new T[size];
@@ -80,7 +77,7 @@ struct Model *TrainVM(const struct Problem *train, const struct Parameter *param
       if (idx < num_neighbors) {
         int k;
         for (k = 0; k < num_classes; ++k) {
-          if (label[k] == train->y[j]) {
+          if (label[k] == train->y[i]) {
             break;
           }
         }
@@ -171,14 +168,14 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
         for (k = 0; k < num_classes; ++k)
           if (label[k] == train->y[j])
             break;
-        InsertLabel(minL[j], i, num_neighbors, idx);
+        InsertLabel(minL[l], k, num_neighbors, idx);
       }
     }
 
     for (int j = 0; j < l+1; ++j) {
       int *voting = new int[num_classes];
-      for (int j = 0; j < num_classes; ++j) {
-        voting[j] = 0;
+      for (int k = 0; k < num_classes; ++k) {
+        voting[k] = 0;
       }
 
       for (int k = 0; k < num_neighbors; ++k) {
@@ -196,12 +193,14 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
     }
 
     for (int j = 0; j < l; ++j) {
-      if (category[j] == category[l])
-        for (int k = 0; k < num_classes; ++k)
+      if (category[j] == category[l]) {
+        for (int k = 0; k < num_classes; ++k) {
           if (label[k] == train->y[j]) {
             f_matrix[i][k]++;
             break;
           }
+        }
+      }
     }
     f_matrix[i][i]++;
 

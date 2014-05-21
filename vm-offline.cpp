@@ -1,12 +1,13 @@
 #include "utilities.h"
 #include "knn.h"
+#include "vm.h"
 #include <iostream>
 #include <fstream>
 
 void ExitWithHelp();
 void ParseCommandLine(int argc, char *argv[], char *train_file_name, char *test_file_name, char *output_file_name);
 
-struct KNNParameter knn_parameter;
+struct Parameter param;
 
 int main(int argc, char *argv[])
 {
@@ -14,6 +15,7 @@ int main(int argc, char *argv[])
   char test_file_name[1024];
   char output_file_name[1024];
   struct Problem *train, *test;
+  struct Model *model;
   int num_correct = 0;
 
   ParseCommandLine(argc, argv, train_file_name, test_file_name, output_file_name);
@@ -27,11 +29,14 @@ int main(int argc, char *argv[])
     exit(EXIT_FAILURE);
   }
 
-  for (int i = 0; i < test->l; ++i) {
-    double predict_label;
+  model = TrainVM(train, &param);
 
-    predict_label = KNN(train, test->x[i], knn_parameter.num_neighbors);
-    output_file << predict_label << '\n';
+  for (int i = 0; i < test->l; ++i) {
+    double predict_label, lower, upper;
+
+    predict_label = PredictVM(train, model, test->x[i], lower, upper);
+
+    output_file << predict_label << ' ' << lower << ' ' << upper << '\n';
     if (predict_label == test->y[i]) {
       ++num_correct;
     }
@@ -56,7 +61,7 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
 {
   int i;
 
-  knn_parameter.num_neighbors = 1;
+  param.knn_param.num_neighbors = 1;
 
   for (i = 1; i < argc; ++i) {
     if (argv[i][0] != '-')
@@ -66,7 +71,7 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
     switch (argv[i][1]) {
       case 'k':
         ++i;
-        knn_parameter.num_neighbors = atoi(argv[i]);
+        param.knn_param.num_neighbors = atoi(argv[i]);
         break;
       default:
         std::cout << "Unknown option: -" << argv[i][1] << std::endl;

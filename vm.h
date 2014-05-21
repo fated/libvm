@@ -7,6 +7,7 @@
 struct Parameter
 {
   struct KNNParameter knn_param;
+  int num_categories;
 };
 
 struct Model
@@ -23,6 +24,9 @@ struct Model
 
 struct Model *TrainVM(const struct Problem *train, const struct Parameter *param);
 
-double PredictVM(const struct Model *model, const struct Node *x);
+double PredictVM(const struct Problem *train, const struct Model *model, const struct Node *x, double &lower, double &upper);
+
+int SaveModel(const char *model_file_name, const struct Model *model);
+// struct Model *LoadModel(const char *model_file_name);
 
 #endif  // LIBVM_VM_H_

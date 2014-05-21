@@ -18,7 +18,7 @@ struct Problem
   struct Node **x;
 };
 
-template<class T>
+template<typename T>
 T FindMostFrequent(T *array, int size)
 {
   std::vector<T> v(array, array+size);

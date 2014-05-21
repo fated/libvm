@@ -13,8 +13,8 @@ all: vm-offline
 # 	fi; \
 # 	$(CXX) $${SHARED_LIB_FLAG} svm.o -o libsvm.so.$(SHVER)
 
-vm-offline: vm-offline.cpp utilities.o knn.o
-	$(CXX) $(CFLAGS) vm-offline.cpp utilities.o knn.o -o vm-offline -lm
+vm-offline: vm-offline.cpp utilities.o knn.o vm.o
+	$(CXX) $(CFLAGS) vm-offline.cpp utilities.o knn.o vm.o -o vm-offline -lm
 
 # objects = foo.o bar.o
 # all: $(objects)
@@ -27,5 +27,8 @@ utilities.o: utilities.cpp utilities.h
 knn.o: knn.cpp knn.h
 	$(CXX) $(CFLAGS) -c knn.cpp
 
+vm.o: vm.cpp vm.h
+	$(CXX) $(CFLAGS) -c vm.cpp
+
 clean:
-	rm -f utilities.o knn.o vm-offline
+	rm -f utilities.o knn.o vm.o vm-offline

@@ -3,7 +3,7 @@ CFLAGS = -Wall -Wconversion -O3 -fPIC
 SHVER = 2
 OS = $(shell uname)
 
-all: vm-offline
+all: vm-offline vm-online
 
 # lib: utilities.o
 # 	if [ "$(OS)" = "Darwin" ]; then \
@@ -15,6 +15,9 @@ all: vm-offline
 
 vm-offline: vm-offline.cpp utilities.o knn.o vm.o
 	$(CXX) $(CFLAGS) vm-offline.cpp utilities.o knn.o vm.o -o vm-offline -lm
+
+vm-online: vm-online.cpp utilities.o knn.o vm.o
+	$(CXX) $(CFLAGS) vm-online.cpp utilities.o knn.o vm.o -o vm-online -lm
 
 # objects = foo.o bar.o
 # all: $(objects)

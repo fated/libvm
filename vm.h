@@ -24,9 +24,16 @@ struct Model
   int **label_neighbors;
 };
 
-struct Model *TrainVM(const struct Problem *train, const struct Parameter *param);
+template <typename T> static inline void swap(T& x, T& y)
+{
+  T t = x;
+  x = y;
+  y = t;
+}
 
+struct Model *TrainVM(const struct Problem *train, const struct Parameter *param);
 double PredictVM(const struct Problem *train, const struct Model *model, const struct Node *x, double &lower, double &upper);
+void OnlinePredict(const struct Problem *prob, const struct Parameter *param, double *predict_labels, int *indices, double *lower_bounds, double *upper_bounds);
 
 int SaveModel(const char *model_file_name, const struct Model *model);
 struct Model *LoadModel(const char *model_file_name);

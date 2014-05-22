@@ -19,8 +19,16 @@ int main(int argc, char *argv[])
   struct Model *model;
   int num_correct = 0;
   double avg_lower_bound = 0, avg_upper_bound = 0;
+  const char *error_message;
 
   ParseCommandLine(argc, argv, train_file_name, test_file_name, output_file_name, model_file_name);
+  error_message = CheckParameter(&param);
+
+  if (error_message != NULL) {
+    std::cout << error_message << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
   train = ReadProblem(train_file_name);
   test = ReadProblem(test_file_name);
 
@@ -31,7 +39,14 @@ int main(int argc, char *argv[])
     exit(EXIT_FAILURE);
   }
 
-  model = TrainVM(train, &param);
+  if (param.load_model == 1) {
+    model = LoadModel(model_file_name);
+    if (model == NULL) {
+      exit(EXIT_FAILURE);
+    }
+  } else {
+    model = TrainVM(train, &param);
+  }
 
   if (param.save_model == 1) {
     if (SaveModel(model_file_name, model) != 0) {
@@ -80,6 +95,7 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
 
   param.knn_param.num_neighbors = 1;
   param.save_model = 0;
+  param.load_model = 0;
 
   for (i = 1; i < argc; ++i) {
     if (argv[i][0] != '-')
@@ -94,6 +110,11 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
       case 's':
         ++i;
         param.save_model = 1;
+        strcpy(model_file_name, argv[i]);
+        break;
+      case 'l':
+        ++i;
+        param.load_model = 1;
         strcpy(model_file_name, argv[i]);
         break;
       default:

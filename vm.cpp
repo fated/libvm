@@ -279,22 +279,114 @@ int SaveModel(const char *model_file_name, const struct Model *model)
   return 0;
 }
 
-// struct Model *LoadModel(const char *model_file_name)
-// {
+struct Model *LoadModel(const char *model_file_name)
+{
+  std::ifstream model_file(model_file_name);
+  if (!model_file.is_open()) {
+    std::cerr << "Unable to open model file: " << model_file_name << std::endl;
+    return NULL;
+  }
 
-// }
+  Model *model = new Model;
+
+  Parameter& param = model->param;
+  model->labels = NULL;
+  model->categories = NULL;
+  model->dist_neighbors = NULL;
+  model->label_neighbors = NULL;
+
+  char cmd[80];
+  while (1) {
+    model_file >> cmd;
+
+    if (strcmp(cmd, "num_neighbors") == 0) {
+      model_file >> param.knn_param.num_neighbors;
+    } else
+    if (strcmp(cmd, "num_classes") == 0) {
+      model_file >> model->num_classes;
+    } else
+    if (strcmp(cmd, "num_examples") == 0) {
+      model_file >> model->l;
+    } else
+    if (strcmp(cmd, "labels") == 0) {
+      int n = model->num_classes;
+      model->labels = new int[n];
+      for (int i = 0; i < n; ++i) {
+        model_file >> model->labels[i];
+      }
+    } else
+    if (strcmp(cmd, "categories") == 0) {
+      int l = model->l;
+      model->categories = new int[l];
+      for (int i = 0; i < l; ++i) {
+        model_file >> model->categories[i];
+      }
+    } else
+    if (strcmp(cmd, "dist_neighbors") == 0) {
+      int n = param.knn_param.num_neighbors;
+      int l = model->l;
+      model->dist_neighbors = new double*[l];
+      for (int i = 0; i < l; ++i) {
+        model->dist_neighbors[i] = new double[n];
+        for (int j = 0; j < n; ++j) {
+          model_file >> model->dist_neighbors[i][j];
+        }
+      }
+    } else
+    if (strcmp(cmd, "label_neighbors") == 0) {
+      int n = param.knn_param.num_neighbors;
+      int l = model->l;
+      model->label_neighbors = new int*[l];
+      for (int i = 0; i < l; ++i) {
+        model->label_neighbors[i] = new int[n];
+        for (int j = 0; j < n; ++j) {
+          model_file >> model->label_neighbors[i][j];
+        }
+      }
+      break;
+    } else {
+      std::cerr << "Unknown text in model file: " << cmd << std::endl;
+      FreeModel(model);
+      model_file.close();
+      return NULL;
+    }
+  }
+  model_file.close();
+
+  return model;
+}
 
 void FreeModel(struct Model *model)
 {
-  delete[] model->labels;
-  delete[] model->categories;
-
-  for (int i = 0; i < model->l; ++i) {
-    delete[] model->dist_neighbors[i];
-    delete[] model->label_neighbors[i];
+  if (model->labels != NULL) {
+    delete[] model->labels;
   }
-  delete[] model->dist_neighbors;
-  delete[] model->label_neighbors;
+
+  if (model->categories != NULL) {
+    delete[] model->categories;
+  }
+
+  if (model->dist_neighbors != NULL && model->label_neighbors != NULL) {
+    for (int i = 0; i < model->l; ++i) {
+      delete[] model->dist_neighbors[i];
+      delete[] model->label_neighbors[i];
+    }
+    delete[] model->dist_neighbors;
+    delete[] model->label_neighbors;
+  }
 
   return;
+}
+
+const char *CheckParameter(const struct Parameter *param)
+{
+  if (param->knn_param.num_neighbors < 1) {
+    return "num_neighbors should be greater than 0";
+  }
+
+  if (param->save_model == 1 && param->load_model == 1) {
+    return "cannot save and load model at the same time";
+  }
+
+  return NULL;
 }

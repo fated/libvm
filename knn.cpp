@@ -2,7 +2,7 @@
 #include "knn.h"
 #include <cmath>
 
-double CalcDist(struct Node *x1, struct Node *x2)
+double CalcDist(const struct Node *x1, const struct Node *x2)
 {
   double sum = 0;
 
@@ -21,6 +21,18 @@ double CalcDist(struct Node *x1, struct Node *x2)
       }
     }
   }
+  if (x1->index == -1) {
+    while (x2->index != -1) {
+      sum += x2->value * x2->value;
+      ++x2;
+    }
+  }
+  if (x2->index == -1) {
+    while (x1->index != -1) {
+      sum += x1->value * x1->value;
+      ++x1;
+    }
+  }
 
   return sqrt(sum);
 }
@@ -30,7 +42,7 @@ int CompareDist(double *neighbors, double dist, int num_neighbors)
   int i = 0;
 
   while (i < num_neighbors) {
-    if (dist < neighbors[i] || neighbors[i] == -1)
+    if (dist < neighbors[i])
       break;
     ++i;
   }
@@ -43,23 +55,14 @@ int CompareDist(double *neighbors, double dist, int num_neighbors)
   return i;
 }
 
-void InsertLabel(double *labels, double label, int num_neighbors, int index)
-{
-  for (int i = num_neighbors-1; i > index; --i)
-    labels[i] = labels[i-1];
-  labels[index] = label;
-
-  return;
-}
-
 double KNN(struct Problem *train, struct Node *x, const int num_neighbors)
 {
   double neighbors[num_neighbors];
   double labels[num_neighbors];
 
   for (int i = 0; i < num_neighbors; ++i) {
-    neighbors[i] = -1;
-    labels[i] = 0;
+    neighbors[i] = INF;
+    labels[i] = -1;
   }
   for (int i = 0; i < train->l; ++i) {
     double dist = CalcDist(train->x[i], x);

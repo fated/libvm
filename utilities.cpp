@@ -108,3 +108,15 @@ struct Problem *ReadProblem(const char *file_name)
   input_file.close();
   return problem;
 }
+
+void FreeProblem(struct Problem *problem)
+{
+  delete[] problem->y;
+  for (int i = 0; i < problem->l; ++i) {
+    delete[] problem->x[i];
+  }
+  delete[] problem->x;
+  delete problem;
+
+  return;
+}

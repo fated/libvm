@@ -23,3 +23,7 @@
 # Project files
 *.sublime-project
 *.sublime-workspace
+
+# CTags files
+.tags
+.tags_sorted_by_file

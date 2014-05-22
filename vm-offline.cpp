@@ -5,7 +5,7 @@
 #include <fstream>
 
 void ExitWithHelp();
-void ParseCommandLine(int argc, char *argv[], char *train_file_name, char *test_file_name, char *output_file_name);
+void ParseCommandLine(int argc, char *argv[], char *train_file_name, char *test_file_name, char *output_file_name, char *model_file_name);
 
 struct Parameter param;
 
@@ -14,12 +14,13 @@ int main(int argc, char *argv[])
   char train_file_name[256];
   char test_file_name[256];
   char output_file_name[256];
+  char model_file_name[256];
   struct Problem *train, *test;
   struct Model *model;
   int num_correct = 0;
   double avg_lower_bound = 0, avg_upper_bound = 0;
 
-  ParseCommandLine(argc, argv, train_file_name, test_file_name, output_file_name);
+  ParseCommandLine(argc, argv, train_file_name, test_file_name, output_file_name, model_file_name);
   train = ReadProblem(train_file_name);
   test = ReadProblem(test_file_name);
 
@@ -31,6 +32,12 @@ int main(int argc, char *argv[])
   }
 
   model = TrainVM(train, &param);
+
+  if (param.save_model == 1) {
+    if (SaveModel(model_file_name, model) != 0) {
+      std::cerr << "Unable to save model file" << std::endl;
+    }
+  }
 
   for (int i = 0; i < test->l; ++i) {
     double predict_label, lower_bound, upper_bound;
@@ -54,6 +61,7 @@ int main(int argc, char *argv[])
   FreeProblem(train);
   FreeProblem(test);
   FreeModel(model);
+
   return 0;
 }
 
@@ -61,15 +69,17 @@ void ExitWithHelp()
 {
   std::cout << "Usage: vm-offline [options] train_file test_file [output_file]\n"
             << "options:\n"
-            << "  -k num_neighbors : set number of neighbors in kNN (default 1)\n";
+            << "  -k num_neighbors : set number of neighbors in kNN (default 1)\n"
+            << "  -s model_file_name : set model file name\n";
   exit(EXIT_FAILURE);
 }
 
-void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_file_name, char *output_file_name)
+void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_file_name, char *output_file_name, char *model_file_name)
 {
   int i;
 
   param.knn_param.num_neighbors = 1;
+  param.save_model = 0;
 
   for (i = 1; i < argc; ++i) {
     if (argv[i][0] != '-')
@@ -80,6 +90,11 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
       case 'k':
         ++i;
         param.knn_param.num_neighbors = atoi(argv[i]);
+        break;
+      case 's':
+        ++i;
+        param.save_model = 1;
+        strcpy(model_file_name, argv[i]);
         break;
       default:
         std::cerr << "Unknown option: -" << argv[i][1] << std::endl;

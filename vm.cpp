@@ -2,6 +2,7 @@
 #include "knn.h"
 #include "vm.h"
 #include <iostream>
+#include <fstream>
 #include <cmath>
 
 template <typename T, typename S> static inline void clone(T *&dest, S *src, int size)
@@ -98,7 +99,7 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
   int l = model->l;
   int num_classes = model->num_classes;
   int num_neighbors = param.knn_param.num_neighbors;
-  // int num_categories = num_classes;
+  // int num_categories = param.num_categories;
   int *labels = model->labels;
   int *alter_labels = new int[l];
   int **f_matrix = new int*[num_classes];
@@ -156,8 +157,7 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
 
     for (int j = 0; j < l; ++j) {
       if (categories[j] == categories[l]) {
-        f_matrix[i][alter_labels[j]]++;
-        break;
+        ++f_matrix[i][alter_labels[j]];
       }
     }
     f_matrix[i][i]++;
@@ -171,6 +171,7 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
     delete[] label_neighbors;
     delete[] categories;
   }
+  delete[] alter_labels;
 
   double **matrix = new double*[num_classes];
   for (int i = 0; i < num_classes; ++i) {
@@ -222,6 +223,59 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
 
 int SaveModel(const char *model_file_name, const struct Model *model)
 {
+  std::ofstream model_file(model_file_name);
+  if (!model_file.is_open()) {
+    std::cerr << "Unable to open model file: " << model_file_name << std::endl;
+    return -1;
+  }
+
+  const Parameter& param = model->param;
+  int num_neighbors = param.knn_param.num_neighbors;
+
+  model_file << "num_neighbors " << num_neighbors << '\n';
+
+  int num_classes = model->num_classes;
+  int l = model->l;
+  model_file << "num_classes " << num_classes << '\n';
+  model_file << "num_examples " << l << '\n';
+
+  if (model->labels) {
+    model_file << "labels";
+    for (int i = 0; i < num_classes; ++i) {
+      model_file << ' ' << model->labels[i];
+    }
+    model_file << '\n';
+  }
+
+  if (model->categories) {
+    model_file << "categories";
+    for (int i = 0; i < l; ++i) {
+      model_file << ' ' << model->categories[i];
+    }
+    model_file << '\n';
+  }
+
+  if (model->dist_neighbors) {
+    model_file << "dist_neighbors\n";
+    for (int i = 0; i < l; ++i) {
+      for (int j = 0; j < num_neighbors; ++j) {
+        model_file << model->dist_neighbors[i][j] << ' ';
+      }
+    }
+    model_file << '\n';
+  }
+
+  if (model->label_neighbors) {
+    model_file << "label_neighbors\n";
+    for (int i = 0; i < l; ++i) {
+      for (int j = 0; j < num_neighbors; ++j) {
+        model_file << model->label_neighbors[i][j] << ' ';
+      }
+    }
+    model_file << '\n';
+  }
+
+  model_file.close();
   return 0;
 }
 

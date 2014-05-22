@@ -8,6 +8,7 @@ struct Parameter
 {
   struct KNNParameter knn_param;
   int num_categories;
+  int save_model;
 };
 
 struct Model

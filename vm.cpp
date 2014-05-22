@@ -47,64 +47,47 @@ struct Model *TrainVM(const struct Problem *train, const struct Parameter *param
   if (num_classes == 1)
     std::cerr << "WARNING: training set only has one class. See README for details." << std::endl;
 
-  int *category = new int[l];
-  double **minD = new double*[l];
-  int **minL = new int*[l];
+  int *categories = new int[l];
+  double **dist_neighbors = new double*[l];
+  int **label_neighbors = new int*[l];
 
   for (int i = 0; i < l; ++i) {
-    minD[i] = new double[num_neighbors];
-    minL[i] = new int[num_neighbors];
+    dist_neighbors[i] = new double[num_neighbors];
+    label_neighbors[i] = new int[num_neighbors];
     for (int j = 0; j < num_neighbors; ++j) {
-      minD[i][j] = INF;
-      minL[i][j] = -1;
+      dist_neighbors[i][j] = INF;
+      label_neighbors[i][j] = -1;
     }
-    category[i] = -1;
+    categories[i] = -1;
   }
 
   for (int i = 0; i < l-1; ++i) {
     for (int j = i+1; j < l; ++j) {
       double dist = CalcDist(train->x[i], train->x[j]);
+      int index;
 
-      int idx = CompareDist(minD[i], dist, num_neighbors);
-      if (idx < num_neighbors) {
-        InsertLabel(minL[i], alter_labels[j], num_neighbors, idx);
+      index = CompareDist(dist_neighbors[i], dist, num_neighbors);
+      if (index < num_neighbors) {
+        InsertLabel(label_neighbors[i], alter_labels[j], num_neighbors, index);
       }
-      idx = CompareDist(minD[j], dist, num_neighbors);
-      if (idx < num_neighbors) {
-        InsertLabel(minL[j], alter_labels[i], num_neighbors, idx);
+      index = CompareDist(dist_neighbors[j], dist, num_neighbors);
+      if (index < num_neighbors) {
+        InsertLabel(label_neighbors[j], alter_labels[i], num_neighbors, index);
       }
     }
   }
 
   for (int i = 0; i < l; ++i) {
-    int *voting = new int[num_classes];
-    for (int j = 0; j < num_classes; ++j) {
-      voting[j] = 0;
-    }
-
-    for (int j = 0; j < num_neighbors; ++j) {
-      voting[minL[i][j]]++;
-    }
-    int max_vot = voting[0];
-    category[i] = 0;
-    for (int j = 1; j < num_classes; ++j)
-    {
-      if (voting[j] > max_vot)
-      {
-        max_vot = voting[j];
-        category[i] = j;
-      }
-    }
-    delete[] voting;
+    categories[i] = FindMostFrequent(label_neighbors[i], num_neighbors);
   }
   delete[] alter_labels;
 
   model->num_classes = num_classes;
   model->l = l;
   model->labels = labels;
-  model->category = category;
-  model->minD = minD;
-  model->minL = minL;
+  model->categories = categories;
+  model->dist_neighbors = dist_neighbors;
+  model->label_neighbors = label_neighbors;
 
   return model;
 }
@@ -117,92 +100,76 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
   int num_neighbors = param.knn_param.num_neighbors;
   // int num_categories = num_classes;
   int *labels = model->labels;
-  double predict_label;
-
+  int *alter_labels = new int[l];
   int **f_matrix = new int*[num_classes];
-  double y;
+  double y, predict_label;
+
+  for (int i = 0; i < num_classes; ++i) {
+    for (int j = 0; j < l; ++j) {
+      if (labels[i] == train->y[j]) {
+        alter_labels[j] = i;
+      }
+    }
+  }
 
   for (int i = 0; i < num_classes; ++i) {
     y = labels[i];
 
-    int *category = new int[l+1];
-    double **minD = new double*[l+1];
-    int **minL = new int*[l+1];
+    int *categories = new int[l+1];
+    double **dist_neighbors = new double*[l+1];
+    int **label_neighbors = new int*[l+1];
     f_matrix[i] = new int[num_classes];
     for (int j = 0; j < num_classes; ++j) {
       f_matrix[i][j] = 0;
     }
 
     for (int j = 0; j < l; ++j) {
-      clone(minD[j], model->minD[j], num_neighbors);
-      clone(minL[j], model->minL[j], num_neighbors);
-      category[j] = model->category[j];
+      clone(dist_neighbors[j], model->dist_neighbors[j], num_neighbors);
+      clone(label_neighbors[j], model->label_neighbors[j], num_neighbors);
+      categories[j] = model->categories[j];
     }
-    minD[l] = new double[num_neighbors];
-    minL[l] = new int[num_neighbors];
+    dist_neighbors[l] = new double[num_neighbors];
+    label_neighbors[l] = new int[num_neighbors];
     for (int j = 0; j < num_neighbors; ++j) {
-      minD[l][j] = INF;
-      minL[l][j] = -1;
+      dist_neighbors[l][j] = INF;
+      label_neighbors[l][j] = -1;
     }
-    category[l] = -1;
+    categories[l] = -1;
 
     for (int j = 0; j < l; ++j) {
       double dist = CalcDist(train->x[j], x);
+      int index;
 
-      int idx = CompareDist(minD[j], dist, num_neighbors);
-      if (idx < num_neighbors) {
-        InsertLabel(minL[j], i, num_neighbors, idx);
+      index = CompareDist(dist_neighbors[j], dist, num_neighbors);
+      if (index < num_neighbors) {
+        InsertLabel(label_neighbors[j], i, num_neighbors, index);
       }
-      idx = CompareDist(minD[l], dist, num_neighbors);
-      if (idx < num_neighbors) {
-        int k;
-        for (k = 0; k < num_classes; ++k)
-          if (labels[k] == train->y[j])
-            break;
-        InsertLabel(minL[l], k, num_neighbors, idx);
+      index = CompareDist(dist_neighbors[l], dist, num_neighbors);
+      if (index < num_neighbors) {
+        InsertLabel(label_neighbors[l], alter_labels[j], num_neighbors, index);
       }
     }
 
     for (int j = 0; j < l+1; ++j) {
-      int *voting = new int[num_classes];
-      for (int k = 0; k < num_classes; ++k) {
-        voting[k] = 0;
-      }
-
-      for (int k = 0; k < num_neighbors; ++k) {
-        voting[minL[j][k]]++;
-      }
-      int max_vot = voting[0];
-      category[j] = 0;
-      for (int k = 1; k < num_classes; ++k) {
-        if (voting[k] > max_vot) {
-          max_vot = voting[k];
-          category[j] = k;
-        }
-      }
-      delete[] voting;
+      categories[j] = FindMostFrequent(label_neighbors[j], num_neighbors);
     }
 
     for (int j = 0; j < l; ++j) {
-      if (category[j] == category[l]) {
-        for (int k = 0; k < num_classes; ++k) {
-          if (labels[k] == train->y[j]) {
-            f_matrix[i][k]++;
-            break;
-          }
-        }
+      if (categories[j] == categories[l]) {
+        f_matrix[i][alter_labels[j]]++;
+        break;
       }
     }
     f_matrix[i][i]++;
 
     for (int j = 0; j < l+1; ++j) {
-      delete[] minD[j];
-      delete[] minL[j];
+      delete[] dist_neighbors[j];
+      delete[] label_neighbors[j];
     }
 
-    delete[] minD;
-    delete[] minL;
-    delete[] category;
+    delete[] dist_neighbors;
+    delete[] label_neighbors;
+    delete[] categories;
   }
 
   double **matrix = new double*[num_classes];
@@ -266,14 +233,14 @@ int SaveModel(const char *model_file_name, const struct Model *model)
 void FreeModel(struct Model *model)
 {
   delete[] model->labels;
-  delete[] model->category;
+  delete[] model->categories;
 
   for (int i = 0; i < model->l; ++i) {
-    delete[] model->minD[i];
-    delete[] model->minL[i];
+    delete[] model->dist_neighbors[i];
+    delete[] model->label_neighbors[i];
   }
-  delete[] model->minD;
-  delete[] model->minL;
+  delete[] model->dist_neighbors;
+  delete[] model->label_neighbors;
 
   return;
 }

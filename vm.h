@@ -16,10 +16,10 @@ struct Model
   int l;
   int num_classes;
   int *labels;
-  int *category;
+  int *categories;
 
-  double **minD;
-  int **minL;
+  double **dist_neighbors;
+  int **label_neighbors;
 };
 
 struct Model *TrainVM(const struct Problem *train, const struct Parameter *param);

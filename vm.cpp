@@ -551,6 +551,7 @@ void FreeModel(struct Model *model)
     delete[] model->dist_neighbors;
     delete[] model->label_neighbors;
   }
+  delete model;
 
   return;
 }

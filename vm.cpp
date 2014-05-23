@@ -4,8 +4,7 @@
 #include <iostream>
 #include <fstream>
 #include <cmath>
-#include <cstdlib>
-#include <ctime>
+#include <random>
 
 template <typename T, typename S> static inline void clone(T *&dest, S *src, int size)
 {
@@ -105,7 +104,7 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
   int *labels = model->labels;
   int *alter_labels = new int[l];
   int **f_matrix = new int*[num_classes];
-  double y, predict_label;
+  double predict_label;
 
   for (int i = 0; i < num_classes; ++i) {
     for (int j = 0; j < l; ++j) {
@@ -116,8 +115,6 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
   }
 
   for (int i = 0; i < num_classes; ++i) {
-    y = labels[i];
-
     int *categories = new int[l+1];
     double **dist_neighbors = new double*[l+1];
     int **label_neighbors = new int*[l+1];
@@ -231,19 +228,12 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param, do
   int *alter_labels = new int[l];
   std::vector<int> labels;
 
-  Model *model = new Model;
-  model->param = *param;
-
-  std::srand(std::time(NULL));
-
   for (int i = 0; i < l; ++i) {
     indices[i] = i;
   }
-  for (int i = 0; i < l; ++i)
-  {
-    int j = i + rand() % (l-i);
-    swap(indices[i], indices[j]);
-  }
+  std::random_device rd;
+  std::mt19937 g(rd());
+  std::shuffle(indices, indices+l, g);
 
   int *categories = new int[l];
   double **dist_neighbors = new double*[l];
@@ -265,10 +255,10 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param, do
   num_classes = 1;
 
   for (int i = 1; i < l; ++i) {
-    int **f_matrix = new int*[num_classes];
-
     if (num_classes == 1)
       std::cerr << "WARNING: training set only has one class. See README for details." << std::endl;
+
+    int **f_matrix = new int*[num_classes];
 
     for (int j = 0; j < num_classes; ++j) {
       f_matrix[j] = new int[num_classes];
@@ -276,29 +266,54 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param, do
         f_matrix[j][k] = 0;
       }
 
+      double **dist_neighbors_ = new double*[i+1];
+      int **label_neighbors_ = new int*[i+1];
+
+      for (int j = 0; j < i; ++j) {
+        clone(dist_neighbors_[j], dist_neighbors[j], num_neighbors);
+        clone(label_neighbors_[j], label_neighbors[j], num_neighbors);
+      }
+      dist_neighbors_[i] = new double[num_neighbors];
+      label_neighbors_[i] = new int[num_neighbors];
+      for (int j = 0; j < num_neighbors; ++j) {
+        dist_neighbors_[i][j] = INF;
+        label_neighbors_[i][j] = -1;
+      }
+
       for (int k = 0; k < i; ++k) {
         double dist = CalcDist(prob->x[indices[k]], prob->x[indices[i]]);
         int index;
 
-        index = CompareDist(dist_neighbors[i], dist, num_neighbors);
+        index = CompareDist(dist_neighbors_[i], dist, num_neighbors);
         if (index < num_neighbors) {
-          InsertLabel(label_neighbors[i], alter_labels[k], num_neighbors, index);
+          InsertLabel(label_neighbors_[i], alter_labels[k], num_neighbors, index);
         }
-        index = CompareDist(dist_neighbors[k], dist, num_neighbors);
+        index = CompareDist(dist_neighbors_[k], dist, num_neighbors);
         if (index < num_neighbors) {
-          InsertLabel(label_neighbors[k], j, num_neighbors, index);
+          InsertLabel(label_neighbors_[k], j, num_neighbors, index);
         }
       }
       for (int k = 0; k <= i; ++k) {
-        categories[k] = FindMostFrequent(label_neighbors[k], num_neighbors);
+        categories[k] = FindMostFrequent(label_neighbors_[k], num_neighbors);
       }
 
-      for (int k = 0; k < l; ++k) {
+      for (int k = 0; k < i; ++k) {
         if (categories[k] == categories[i]) {
           ++f_matrix[j][alter_labels[k]];
         }
       }
       f_matrix[j][j]++;
+
+      for (int j = 0; j < num_neighbors; ++j) {
+        dist_neighbors[i][j] = dist_neighbors_[i][j];
+        label_neighbors[i][j] = label_neighbors_[i][j];
+      }
+      for (int j = 0; j < i+1; ++j) {
+        delete[] dist_neighbors_[j];
+        delete[] label_neighbors_[j];
+      }
+      delete[] dist_neighbors_;
+      delete[] label_neighbors_;
     }
 
     double **matrix = new double*[num_classes];
@@ -322,9 +337,9 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param, do
     }
 
     int best = 0;
-    for (int i = 1; i < num_classes; ++i) {
-      if (quality[i] > quality[best]) {
-        best = i;
+    for (int j = 1; j < num_classes; ++j) {
+      if (quality[j] > quality[best]) {
+        best = j;
       }
     }
 
@@ -358,9 +373,18 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param, do
       labels.push_back(this_label);
       ++num_classes;
     }
+
+    for (int j = 0; j < i; ++j) {
+      double dist = CalcDist(prob->x[indices[j]], prob->x[indices[i]]);
+      int index = CompareDist(dist_neighbors[j], dist, num_neighbors);
+      if (index < num_neighbors) {
+        InsertLabel(label_neighbors[j], alter_labels[i], num_neighbors, index);
+      }
+    }
+
   }
 
-  for (int i = 0; i < l+1; ++i) {
+  for (int i = 0; i < l; ++i) {
     delete[] dist_neighbors[i];
     delete[] label_neighbors[i];
   }

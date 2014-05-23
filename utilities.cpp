@@ -48,7 +48,12 @@ struct Problem *ReadProblem(const char *file_name)
 
     try
     {
-      problem->y[i] = std::stod(tokens[0]);
+      std::size_t end;
+
+      problem->y[i] = std::stod(tokens[0], &end);
+      if (end != tokens[0].length()) {
+        throw std::invalid_argument("incomplete convention");
+      }
     }
     catch(std::exception& e)
     {

@@ -30,7 +30,10 @@ T FindMostFrequent(T *array, int size)
   T most_frequent_element;
 
   for (std::size_t i = 0; i < v.size(); ++i) {
-    int cur_frequency = ++frequency_map[v[i]];
+    if (v[i] != -1) {
+      ++frequency_map[v[i]];
+    }
+    int cur_frequency = frequency_map[v[i]];
     if (cur_frequency > max_frequency) {
       max_frequency = cur_frequency;
       most_frequent_element = v[i];

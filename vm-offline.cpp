@@ -39,6 +39,8 @@ int main(int argc, char *argv[])
     exit(EXIT_FAILURE);
   }
 
+  std::chrono::time_point<std::chrono::steady_clock> start_time = std::chrono::high_resolution_clock::now();
+
   if (param.load_model == 1) {
     model = LoadModel(model_file_name);
     if (model == NULL) {
@@ -69,9 +71,13 @@ int main(int argc, char *argv[])
   avg_lower_bound /= test->l;
   avg_upper_bound /= test->l;
 
-  printf("%g%% (%d/%d) [%.3f%%, %.3f%%]\n", 100.0*num_correct/test->l, num_correct, test->l,
+  std::chrono::time_point<std::chrono::steady_clock> end_time = std::chrono::high_resolution_clock::now();
+
+  printf("Accuracy: %g%% (%d/%d) Probabilities: [%.3f%%, %.3f%%]\n", 100.0*num_correct/test->l, num_correct, test->l,
       100*avg_lower_bound, 100*avg_upper_bound);
   output_file.close();
+
+  std::cout << "Time cost: " << std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count()/1000.0 << " s\n";
 
   FreeProblem(train);
   FreeProblem(test);

@@ -42,7 +42,11 @@ int main(int argc, char *argv[])
   upper_bounds = new double[prob->l];
   indices = new int[prob->l];
 
+  std::chrono::time_point<std::chrono::steady_clock> start_time = std::chrono::high_resolution_clock::now();
+
   OnlinePredict(prob, &param, predict_labels, indices, lower_bounds, upper_bounds);
+
+  std::chrono::time_point<std::chrono::steady_clock> end_time = std::chrono::high_resolution_clock::now();
 
   output_file << prob->y[indices[0]] << '\n';
 
@@ -58,9 +62,11 @@ int main(int argc, char *argv[])
   avg_lower_bound /= prob->l - 1;
   avg_upper_bound /= prob->l - 1;
 
-  printf("%g%% (%d/%d) [%.3f%%, %.3f%%]\n", 100.0*num_correct/(prob->l-1), num_correct, prob->l-1,
+  printf("Accuracy: %g%% (%d/%d) Probabilities: [%.3f%%, %.3f%%]\n", 100.0*num_correct/(prob->l-1), num_correct, prob->l-1,
       100*avg_lower_bound, 100*avg_upper_bound);
   output_file.close();
+
+  std::cout << "Time cost: " << std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count()/1000.0 << " s\n";
 
   FreeProblem(prob);
   delete[] predict_labels;

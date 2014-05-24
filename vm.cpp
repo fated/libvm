@@ -14,82 +14,164 @@ template <typename T, typename S> static inline void clone(T *&dest, S *src, int
   std::copy(src, src+size, dest);
 }
 
+double CalcCombinedDecisionValues(const double *dec_values, int nr_class, int label)
+{
+  double sum = 0;
+  int k = 0, l = 0;
+  for (int i = 0; i < nr_class-1; ++i) {
+    for (int j = i+1; j < nr_class; ++j) {
+      if (i < label && j == label) {
+        sum -= dec_values[k]/2;
+        ++l;
+      }
+      if (i == label) {
+        sum += dec_values[k]/2;
+        ++l;
+      }
+      ++k;
+    }
+  }
+
+  return (sum / l) + label;
+}
+
+int GetCategory(double combine_dec, int nr_category)
+{
+  int category = floor(combine_dec);
+  if (category < 0) {
+    category = 0;
+  }
+  if (category >= nr_category) {
+    category = nr_category - 1;
+  }
+  return category;
+}
+
 struct Model *TrainVM(const struct Problem *train, const struct Parameter *param)
 {
   Model *model = new Model;
   model->param = *param;
 
-  int l = train->l;
-  int num_classes = 0;
-  int num_neighbors = param->knn_param.num_neighbors;
-  int *labels = NULL;
-  int *alter_labels = new int[l];
+  if (param->taxonomy_type == KNN) {
+    int l = train->l;
+    int num_classes = 0;
+    int num_neighbors = param->knn_param.num_neighbors;
+    int *labels = NULL;
+    int *alter_labels = new int[l];
 
-  std::vector<int> unique_labels;
-  for (int i = 0; i < l; ++i) {
-    int this_label = (int) train->y[i];
-    std::size_t j;
-    for (j = 0; j < num_classes; ++j) {
-      if (this_label == unique_labels[j]) {
-        break;
+    std::vector<int> unique_labels;
+    for (int i = 0; i < l; ++i) {
+      int this_label = (int) train->y[i];
+      std::size_t j;
+      for (j = 0; j < num_classes; ++j) {
+        if (this_label == unique_labels[j]) {
+          break;
+        }
+      }
+      alter_labels[i] = (int) j;
+      if (j == num_classes) {
+        unique_labels.push_back(this_label);
+        ++num_classes;
       }
     }
-    alter_labels[i] = (int) j;
-    if (j == num_classes) {
-      unique_labels.push_back(this_label);
-      ++num_classes;
+    labels = new int[num_classes];
+    for (std::size_t i = 0; i < unique_labels.size(); ++i) {
+      labels[i] = unique_labels[i];
     }
-  }
-  labels = new int[num_classes];
-  for (std::size_t i = 0; i < unique_labels.size(); ++i) {
-    labels[i] = unique_labels[i];
-  }
-  std::vector<int>(unique_labels).swap(unique_labels);
+    std::vector<int>(unique_labels).swap(unique_labels);
 
-  if (num_classes == 1)
-    std::cerr << "WARNING: training set only has one class. See README for details." << std::endl;
+    if (num_classes == 1)
+      std::cerr << "WARNING: training set only has one class. See README for details." << std::endl;
 
-  int *categories = new int[l];
-  double **dist_neighbors = new double*[l];
-  int **label_neighbors = new int*[l];
+    int *categories = new int[l];
+    double **dist_neighbors = new double*[l];
+    int **label_neighbors = new int*[l];
 
-  for (int i = 0; i < l; ++i) {
-    dist_neighbors[i] = new double[num_neighbors];
-    label_neighbors[i] = new int[num_neighbors];
-    for (int j = 0; j < num_neighbors; ++j) {
-      dist_neighbors[i][j] = INF;
-      label_neighbors[i][j] = -1;
-    }
-    categories[i] = -1;
-  }
-
-  for (int i = 0; i < l-1; ++i) {
-    for (int j = i+1; j < l; ++j) {
-      double dist = CalcDist(train->x[i], train->x[j]);
-      int index;
-
-      index = CompareDist(dist_neighbors[i], dist, num_neighbors);
-      if (index < num_neighbors) {
-        InsertLabel(label_neighbors[i], alter_labels[j], num_neighbors, index);
+    for (int i = 0; i < l; ++i) {
+      dist_neighbors[i] = new double[num_neighbors];
+      label_neighbors[i] = new int[num_neighbors];
+      for (int j = 0; j < num_neighbors; ++j) {
+        dist_neighbors[i][j] = INF;
+        label_neighbors[i][j] = -1;
       }
-      index = CompareDist(dist_neighbors[j], dist, num_neighbors);
-      if (index < num_neighbors) {
-        InsertLabel(label_neighbors[j], alter_labels[i], num_neighbors, index);
+      categories[i] = -1;
+    }
+
+    for (int i = 0; i < l-1; ++i) {
+      for (int j = i+1; j < l; ++j) {
+        double dist = CalcDist(train->x[i], train->x[j]);
+        int index;
+
+        index = CompareDist(dist_neighbors[i], dist, num_neighbors);
+        if (index < num_neighbors) {
+          InsertLabel(label_neighbors[i], alter_labels[j], num_neighbors, index);
+        }
+        index = CompareDist(dist_neighbors[j], dist, num_neighbors);
+        if (index < num_neighbors) {
+          InsertLabel(label_neighbors[j], alter_labels[i], num_neighbors, index);
+        }
       }
     }
+
+    for (int i = 0; i < l; ++i) {
+      categories[i] = FindMostFrequent(label_neighbors[i], num_neighbors);
+    }
+    delete[] alter_labels;
+
+    model->num_classes = num_classes;
+    model->l = l;
+    model->labels = labels;
+    model->categories = categories;
+    model->dist_neighbors = dist_neighbors;
+    model->label_neighbors = label_neighbors;
   }
 
-  for (int i = 0; i < l; ++i) {
-    categories[i] = FindMostFrequent(label_neighbors[i], num_neighbors);
-  }
-  delete[] alter_labels;
+  if (param->taxonomy_type == SVM) {
+    int l = train->l;
+    int num_categories = param->num_categories;
+    int *categories = new int[l];
+    double *combined_decision_values = new double[l];
 
-  model->num_classes = num_classes;
-  model->l = l;
-  model->labels = labels;
-  model->categories = categories;
-  model->dist_neighbors = dist_neighbors;
-  model->label_neighbors = label_neighbors;
+    for (int i = 0; i < l; ++i) {
+      categories[i] = -1;
+      combined_decision_values[i] = 0;
+    }
+
+    model->svm_model = svm_train(train, &param->svm_param);
+
+    int num_classes = svm_get_nr_class(model->svm_model);
+    if (num_classes == 1) {
+      std::cerr << "WARNING: training set only has one class. See README for details." << std::endl;
+    }
+    if (num_categories != num_classes) {
+      num_categories = num_classes;
+    }
+
+    for (int i = 0; i < l; ++i) {
+      double *decision_values = NULL;
+      int label = 0;
+      // int dec_l = num_classes*(num_classes-1)/2;
+      double predict_label = svm_predict_dec_values(model->svm_model, train->x[i], &decision_values);
+      for (int j = 0; j < num_classes; ++j) {
+        if (predict_label == model->svm_model->label[j])
+        {
+          label = j;
+          break;
+        }
+      }
+      combined_decision_values[i] = CalcCombinedDecisionValues(decision_values, num_classes, label);
+      categories[i] = GetCategory(combined_decision_values[i], num_categories);
+      free(decision_values);
+    }
+    free(combined_decision_values);
+    model->num_classes = num_classes;
+    model->l = l;
+    model->labels = model->svm_model->label;
+    model->categories = categories;
+    model->num_categories = param->num_categories;
+    model->dist_neighbors = NULL;
+    model->label_neighbors = NULL;
+  }
 
   return model;
 }
@@ -100,122 +182,215 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
   int l = model->l;
   int num_classes = model->num_classes;
   int num_neighbors = param.knn_param.num_neighbors;
-  // int num_categories = param.num_categories;
+  int num_categories = param.num_categories;
   int *labels = model->labels;
-  int *alter_labels = new int[l];
-  int **f_matrix = new int*[num_classes];
   double predict_label;
 
-  for (int i = 0; i < num_classes; ++i) {
-    for (int j = 0; j < l; ++j) {
-      if (labels[i] == train->y[j]) {
-        alter_labels[j] = i;
+  if (param.taxonomy_type == KNN) {
+    int *alter_labels = new int[l];
+    int **f_matrix = new int*[num_classes];
+
+    for (int i = 0; i < num_classes; ++i) {
+      for (int j = 0; j < l; ++j) {
+        if (labels[i] == train->y[j]) {
+          alter_labels[j] = i;
+        }
       }
     }
-  }
+    for (int i = 0; i < num_classes; ++i) {
+      int *categories = new int[l+1];
+      double **dist_neighbors = new double*[l+1];
+      int **label_neighbors = new int*[l+1];
+      f_matrix[i] = new int[num_classes];
+      for (int j = 0; j < num_classes; ++j) {
+        f_matrix[i][j] = 0;
+      }
 
-  for (int i = 0; i < num_classes; ++i) {
-    int *categories = new int[l+1];
-    double **dist_neighbors = new double*[l+1];
-    int **label_neighbors = new int*[l+1];
-    f_matrix[i] = new int[num_classes];
+      for (int j = 0; j < l; ++j) {
+        clone(dist_neighbors[j], model->dist_neighbors[j], num_neighbors);
+        clone(label_neighbors[j], model->label_neighbors[j], num_neighbors);
+        categories[j] = model->categories[j];
+      }
+      dist_neighbors[l] = new double[num_neighbors];
+      label_neighbors[l] = new int[num_neighbors];
+      for (int j = 0; j < num_neighbors; ++j) {
+        dist_neighbors[l][j] = INF;
+        label_neighbors[l][j] = -1;
+      }
+      categories[l] = -1;
+
+      for (int j = 0; j < l; ++j) {
+        double dist = CalcDist(train->x[j], x);
+        int index;
+
+        index = CompareDist(dist_neighbors[j], dist, num_neighbors);
+        if (index < num_neighbors) {
+          InsertLabel(label_neighbors[j], i, num_neighbors, index);
+        }
+        index = CompareDist(dist_neighbors[l], dist, num_neighbors);
+        if (index < num_neighbors) {
+          InsertLabel(label_neighbors[l], alter_labels[j], num_neighbors, index);
+        }
+      }
+
+      for (int j = 0; j < l+1; ++j) {
+        categories[j] = FindMostFrequent(label_neighbors[j], num_neighbors);
+      }
+
+      for (int j = 0; j < l; ++j) {
+        if (categories[j] == categories[l]) {
+          ++f_matrix[i][alter_labels[j]];
+        }
+      }
+      f_matrix[i][i]++;
+
+      for (int j = 0; j < l+1; ++j) {
+        delete[] dist_neighbors[j];
+        delete[] label_neighbors[j];
+      }
+
+      delete[] dist_neighbors;
+      delete[] label_neighbors;
+      delete[] categories;
+    }
+    delete[] alter_labels;
+
+    double **matrix = new double*[num_classes];
+    for (int i = 0; i < num_classes; ++i) {
+      matrix[i] = new double[num_classes];
+      int sum = 0;
+      for (int j = 0; j < num_classes; ++j)
+        sum += f_matrix[i][j];
+      for (int j = 0; j < num_classes; ++j)
+        matrix[i][j] = ((double) f_matrix[i][j]) / sum;
+    }
+
+    double *quality = new double[num_classes];
     for (int j = 0; j < num_classes; ++j) {
-      f_matrix[i][j] = 0;
-    }
-
-    for (int j = 0; j < l; ++j) {
-      clone(dist_neighbors[j], model->dist_neighbors[j], num_neighbors);
-      clone(label_neighbors[j], model->label_neighbors[j], num_neighbors);
-      categories[j] = model->categories[j];
-    }
-    dist_neighbors[l] = new double[num_neighbors];
-    label_neighbors[l] = new int[num_neighbors];
-    for (int j = 0; j < num_neighbors; ++j) {
-      dist_neighbors[l][j] = INF;
-      label_neighbors[l][j] = -1;
-    }
-    categories[l] = -1;
-
-    for (int j = 0; j < l; ++j) {
-      double dist = CalcDist(train->x[j], x);
-      int index;
-
-      index = CompareDist(dist_neighbors[j], dist, num_neighbors);
-      if (index < num_neighbors) {
-        InsertLabel(label_neighbors[j], i, num_neighbors, index);
-      }
-      index = CompareDist(dist_neighbors[l], dist, num_neighbors);
-      if (index < num_neighbors) {
-        InsertLabel(label_neighbors[l], alter_labels[j], num_neighbors, index);
+      quality[j] = matrix[0][j];
+      for (int i = 1; i < num_classes; ++i) {
+        if (matrix[i][j] < quality[j]) {
+          quality[j] = matrix[i][j];
+        }
       }
     }
 
-    for (int j = 0; j < l+1; ++j) {
-      categories[j] = FindMostFrequent(label_neighbors[j], num_neighbors);
-    }
-
-    for (int j = 0; j < l; ++j) {
-      if (categories[j] == categories[l]) {
-        ++f_matrix[i][alter_labels[j]];
-      }
-    }
-    f_matrix[i][i]++;
-
-    for (int j = 0; j < l+1; ++j) {
-      delete[] dist_neighbors[j];
-      delete[] label_neighbors[j];
-    }
-
-    delete[] dist_neighbors;
-    delete[] label_neighbors;
-    delete[] categories;
-  }
-  delete[] alter_labels;
-
-  double **matrix = new double*[num_classes];
-  for (int i = 0; i < num_classes; ++i) {
-    matrix[i] = new double[num_classes];
-    int sum = 0;
-    for (int j = 0; j < num_classes; ++j)
-      sum += f_matrix[i][j];
-    for (int j = 0; j < num_classes; ++j)
-      matrix[i][j] = ((double) f_matrix[i][j]) / sum;
-  }
-
-  double *quality = new double[num_classes];
-  for (int j = 0; j < num_classes; ++j) {
-    quality[j] = matrix[0][j];
+    int best = 0;
     for (int i = 1; i < num_classes; ++i) {
-      if (matrix[i][j] < quality[j]) {
-        quality[j] = matrix[i][j];
+      if (quality[i] > quality[best]) {
+        best = i;
       }
     }
-  }
 
-  int best = 0;
-  for (int i = 1; i < num_classes; ++i) {
-    if (quality[i] > quality[best]) {
-      best = i;
+    lower = quality[best];
+    upper = matrix[0][best];
+    for (int i = 1; i < num_classes; ++i) {
+      if (matrix[i][best] > upper) {
+        upper = matrix[i][best];
+      }
     }
-  }
 
-  lower = quality[best];
-  upper = matrix[0][best];
-  for (int i = 1; i < num_classes; ++i) {
-    if (matrix[i][best] > upper) {
-      upper = matrix[i][best];
+    predict_label = labels[best];
+
+    delete[] quality;
+    for (int i = 0; i < num_classes; ++i) {
+      delete[] f_matrix[i];
+      delete[] matrix[i];
     }
+    delete[] f_matrix;
+    delete[] matrix;
+
   }
 
-  predict_label = labels[best];
+  if (param.taxonomy_type == SVM) {
+    int **f_matrix = new int*[num_classes];
+    double y;
 
-  delete[] quality;
-  for (int i = 0; i < num_classes; ++i) {
-    delete[] f_matrix[i];
-    delete[] matrix[i];
+    for (int i = 0; i < num_classes; ++i)
+    {
+      y = labels[i];
+
+      int *categories = new int[l+1];
+      f_matrix[i] = new int[num_classes];
+      memset(f_matrix[i], 0, sizeof(int)*num_classes);
+
+      for (int j = 0; j < l; ++j)
+      {
+        categories[j] = model->categories[j];
+      }
+      categories[l] = -1;
+
+      double *decision_values = NULL;
+      int lab_idx = 0;
+      // int dec_l = num_classes*(num_classes-1)/2;
+      double predict_label = svm_predict_dec_values(model->svm_model, x, &decision_values);
+      for (int j = 0; j < num_classes; ++j) {
+        if (predict_label == labels[j])
+        {
+          lab_idx = j;
+          break;
+        }
+      }
+      double combine_dec = CalcCombinedDecisionValues(decision_values, num_classes, lab_idx);;
+      categories[l] = GetCategory(combine_dec, num_categories);
+      free(decision_values);
+
+      for (int j = 0; j < l; ++j)
+      {
+        if (categories[j] == categories[l])
+          for (int k = 0; k < num_classes; ++k)
+            if (labels[k] == train->y[j])
+            {
+              f_matrix[i][k]++;
+              break;
+            }
+      }
+      f_matrix[i][i]++;
+
+      delete[] categories;
+    }
+
+    double **matrix = new double*[num_classes];
+    for (int i = 0; i < num_classes; ++i) {
+      matrix[i] = new double[num_classes];
+      int sum = 0;
+      for (int j = 0; j < num_classes; ++j)
+        sum += f_matrix[i][j];
+      for (int j = 0; j < num_classes; ++j)
+        matrix[i][j] = ((double) f_matrix[i][j]) / sum;
+    }
+
+    double *quality = new double[num_classes];
+    for (int j = 0; j < num_classes; ++j) {
+      quality[j] = matrix[0][j];
+      for (int i = 1; i < num_classes; ++i)
+        if (matrix[i][j] < quality[j])
+          quality[j] = matrix[i][j];
+    }
+
+    int best = 0;
+    for (int i = 1; i < num_classes; ++i)
+      if (quality[i] > quality[best])
+        best = i;
+
+    lower = quality[best];
+    upper = matrix[0][best];
+    for (int i = 1; i < num_classes; ++i)
+      if (matrix[i][best] > upper)
+        upper = matrix[i][best];
+
+    predict_label = labels[best];
+
+    delete[] quality;
+    for (int i = 0; i < num_classes; ++i)
+    {
+      delete[] f_matrix[i];
+      delete[] matrix[i];
+    }
+    delete[] f_matrix;
+    delete[] matrix;
+
   }
-  delete[] f_matrix;
-  delete[] matrix;
 
   return predict_label;
 }

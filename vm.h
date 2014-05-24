@@ -3,20 +3,27 @@
 
 #include "utilities.h"
 #include "knn.h"
+#include "svm.h"
+
+enum { KNN, SVM };
 
 struct Parameter
 {
   struct KNNParameter knn_param;
+  struct SVMParameter svm_param;
   int num_categories;
   int save_model;
   int load_model;
+  int taxonomy_type;
 };
 
 struct Model
 {
   struct Parameter param;
+  struct SVMModel *svm_model;
   int l;
   int num_classes;
+  int num_categories;
   int *labels;
   int *categories;
 

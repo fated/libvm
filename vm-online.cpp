@@ -30,6 +30,10 @@ int main(int argc, char *argv[])
 
   prob = ReadProblem(data_file_name);
 
+  if (param.taxonomy_type == SVM) {
+    param.svm_param.gamma = 1.0 / prob->max_index;
+  }
+
   std::ofstream output_file(output_file_name);
 
   if (!output_file.is_open()) {
@@ -81,6 +85,9 @@ void ExitWithHelp()
 {
   std::cout << "Usage: vm-online [options] data_file [output_file]\n"
             << "options:\n"
+            << "  -t taxonomy_type : set type of taxonomy (default 0)\n"
+            << "    0 -- k-nearest neighbors\n"
+            << "    1 -- support vector machine\n"
             << "  -k num_neighbors : set number of neighbors in kNN (default 1)\n";
   exit(EXIT_FAILURE);
 }
@@ -90,6 +97,7 @@ void ParseCommandLine(int argc, char **argv, char *data_file_name, char *output_
   int i;
 
   param.knn_param.num_neighbors = 1;
+  param.taxonomy_type = KNN;
   param.save_model = 0;
   param.load_model = 0;
 
@@ -99,15 +107,41 @@ void ParseCommandLine(int argc, char **argv, char *data_file_name, char *output_
     if ((i+1) >= argc)
       ExitWithHelp();
     switch (argv[i][1]) {
+      case 't':
+        ++i;
+        param.taxonomy_type = atoi(argv[i]);
       case 'k':
         ++i;
         param.knn_param.num_neighbors = atoi(argv[i]);
+        break;
+      case 'c':
+        ++i;
+        param.num_categories = atoi(argv[i]);
         break;
       default:
         std::cerr << "Unknown option: -" << argv[i][1] << std::endl;
         ExitWithHelp();
     }
   }
+
+  if (param.taxonomy_type == SVM) {
+    param.svm_param.svm_type = C_SVC;
+    param.svm_param.kernel_type = RBF;
+    param.svm_param.degree = 3;
+    param.svm_param.gamma = 0.1;  // 1/num_features
+    param.svm_param.coef0 = 0;
+    param.svm_param.nu = 0.5;
+    param.svm_param.cache_size = 100;
+    param.svm_param.C = 1;
+    param.svm_param.eps = 1e-3;
+    param.svm_param.p = 0.1;
+    param.svm_param.shrinking = 1;
+    param.svm_param.probability = 0;
+    param.svm_param.nr_weight = 0;
+    param.svm_param.weight_label = NULL;
+    param.svm_param.weight = NULL;
+  }
+
   if (i >= argc)
     ExitWithHelp();
   strcpy(data_file_name, argv[i]);

@@ -55,7 +55,7 @@ int CompareDist(double *neighbors, double dist, int num_neighbors)
   return i;
 }
 
-double KNN(struct Problem *train, struct Node *x, const int num_neighbors)
+double PredictKNN(struct Problem *train, struct Node *x, const int num_neighbors)
 {
   double neighbors[num_neighbors];
   double labels[num_neighbors];

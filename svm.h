@@ -1,5 +1,5 @@
-#ifndef _LIBSVM_H
-#define _LIBSVM_H
+#ifndef LIBVM_SVM_H_
+#define LIBVM_SVM_H_
 
 #include "utilities.h"
 
@@ -48,35 +48,34 @@ struct SVMModel
   int *nSV;    /* number of SVs for each class (nSV[k]) */
         /* nSV[0] + nSV[1] + ... + nSV[k-1] = l */
   /* XXX */
-  int free_sv;    /* 1 if SVMModel is created by svm_load_model*/
-        /* 0 if SVMModel is created by svm_train */
+  int free_sv;    /* 1 if SVMModel is created by LoadSVMModel*/
+        /* 0 if SVMModel is created by TrainSVM */
 };
 
-struct SVMModel *svm_train(const struct Problem *prob, const struct SVMParameter *param);
+struct SVMModel *TrainSVM(const struct Problem *prob, const struct SVMParameter *param);
 void svm_cross_validation(const struct Problem *prob, const struct SVMParameter *param, int nr_fold, double *target);
 
-int svm_save_model(const char *model_file_name, const struct SVMModel *model);
-struct SVMModel *svm_load_model(const char *model_file_name);
+int SaveSVMModel(const char *model_file_name, const struct SVMModel *model);
+struct SVMModel *LoadSVMModel(const char *model_file_name);
 
-int svm_get_svm_type(const struct SVMModel *model);
-int svm_get_nr_class(const struct SVMModel *model);
-void svm_get_labels(const struct SVMModel *model, int *label);
-void svm_get_sv_indices(const struct SVMModel *model, int *sv_indices);
-int svm_get_nr_sv(const struct SVMModel *model);
-double svm_get_svr_probability(const struct SVMModel *model);
+int get_svm_type(const struct SVMModel *model);
+int get_nr_class(const struct SVMModel *model);
+void get_labels(const struct SVMModel *model, int *label);
+void get_sv_indices(const struct SVMModel *model, int *sv_indices);
+int get_nr_sv(const struct SVMModel *model);
+double get_svr_probability(const struct SVMModel *model);
 
-double svm_predict_values(const struct SVMModel *model, const struct Node *x, double* dec_values);
-double svm_predict(const struct SVMModel *model, const struct Node *x);
-double svm_predict_dec_values(const struct SVMModel *model, const struct Node *x, double **dec_values);
+double PredictValues(const struct SVMModel *model, const struct Node *x, double* dec_values);
+double PredictSVM(const struct SVMModel *model, const struct Node *x);
+double PredictDecisionValues(const struct SVMModel *model, const struct Node *x, double **dec_values);
 double svm_predict_probability(const struct SVMModel *model, const struct Node *x, double* prob_estimates);
 
-void svm_free_model_content(struct SVMModel *model_ptr);
-void svm_free_and_destroy_model(struct SVMModel **model_ptr_ptr);
-void svm_destroy_param(struct SVMParameter *param);
+void FreeSVMModel(struct SVMModel **model_ptr_ptr);
+void FreeSVMParam(struct SVMParameter *param);
 
-const char *svm_check_parameter(const struct Problem *prob, const struct SVMParameter *param);
+const char *CheckSVMParameter(const struct Problem *prob, const struct SVMParameter *param);
 int svm_check_probability_model(const struct SVMModel *model);
 
 void svm_set_print_string_function(void (*print_func)(const char *));
 
-#endif /* _LIBSVM_H */
+#endif  // LIBVM_SVM_H_

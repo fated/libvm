@@ -1953,15 +1953,15 @@ static void svm_binary_svc_probability(
       subparam.weight_label[1]=-1;
       subparam.weight[0]=Cp;
       subparam.weight[1]=Cn;
-      struct SVMModel *submodel = svm_train(&subprob,&subparam);
+      struct SVMModel *submodel = TrainSVM(&subprob,&subparam);
       for(j=begin;j<end;j++)
       {
-        svm_predict_values(submodel,prob->x[perm[j]],&(dec_values[perm[j]]));
+        PredictValues(submodel,prob->x[perm[j]],&(dec_values[perm[j]]));
         // ensure +1 -1 order; reason not using CV subroutine
         dec_values[perm[j]] *= submodel->label[0];
       }
-      svm_free_and_destroy_model(&submodel);
-      svm_destroy_param(&subparam);
+      FreeSVMModel(&submodel);
+      FreeSVMParam(&subparam);
     }
     free(subprob.x);
     free(subprob.y);
@@ -2084,7 +2084,7 @@ static void svm_group_classes(const Problem *prob, int *nr_class_ret, int **labe
 //
 // Interface functions
 //
-SVMModel *svm_train(const Problem *prob, const SVMParameter *param)
+SVMModel *TrainSVM(const Problem *prob, const SVMParameter *param)
 {
   SVMModel *model = Malloc(SVMModel,1);
   model->param = *param;
@@ -2431,19 +2431,19 @@ void svm_cross_validation(const Problem *prob, const SVMParameter *param, int nr
       subprob.y[k] = prob->y[perm[j]];
       ++k;
     }
-    struct SVMModel *submodel = svm_train(&subprob,param);
+    struct SVMModel *submodel = TrainSVM(&subprob,param);
     if(param->probability &&
        (param->svm_type == C_SVC || param->svm_type == NU_SVC))
     {
-      double *prob_estimates=Malloc(double,svm_get_nr_class(submodel));
+      double *prob_estimates=Malloc(double,get_nr_class(submodel));
       for(j=begin;j<end;j++)
         target[perm[j]] = svm_predict_probability(submodel,prob->x[perm[j]],prob_estimates);
       free(prob_estimates);
     }
     else
       for(j=begin;j<end;j++)
-        target[perm[j]] = svm_predict(submodel,prob->x[perm[j]]);
-    svm_free_and_destroy_model(&submodel);
+        target[perm[j]] = PredictSVM(submodel,prob->x[perm[j]]);
+    FreeSVMModel(&submodel);
     free(subprob.x);
     free(subprob.y);
   }
@@ -2451,37 +2451,36 @@ void svm_cross_validation(const Problem *prob, const SVMParameter *param, int nr
   free(perm);
 }
 
-
-int svm_get_svm_type(const SVMModel *model)
+int get_svm_type(const SVMModel *model)
 {
   return model->param.svm_type;
 }
 
-int svm_get_nr_class(const SVMModel *model)
+int get_nr_class(const SVMModel *model)
 {
   return model->nr_class;
 }
 
-void svm_get_labels(const SVMModel *model, int* label)
+void get_labels(const SVMModel *model, int* label)
 {
   if (model->label != NULL)
     for(int i=0;i<model->nr_class;i++)
       label[i] = model->label[i];
 }
 
-void svm_get_sv_indices(const SVMModel *model, int* indices)
+void get_sv_indices(const SVMModel *model, int* indices)
 {
   if (model->sv_indices != NULL)
     for(int i=0;i<model->l;i++)
       indices[i] = model->sv_indices[i];
 }
 
-int svm_get_nr_sv(const SVMModel *model)
+int get_nr_sv(const SVMModel *model)
 {
   return model->l;
 }
 
-double svm_get_svr_probability(const SVMModel *model)
+double get_svr_probability(const SVMModel *model)
 {
   if ((model->param.svm_type == EPSILON_SVR || model->param.svm_type == NU_SVR) &&
       model->probA!=NULL)
@@ -2493,7 +2492,7 @@ double svm_get_svr_probability(const SVMModel *model)
   }
 }
 
-double svm_predict_values(const SVMModel *model, const Node *x, double* dec_values)
+double PredictValues(const SVMModel *model, const Node *x, double* dec_values)
 {
   int i;
   if(model->param.svm_type == ONE_CLASS ||
@@ -2569,7 +2568,7 @@ double svm_predict_values(const SVMModel *model, const Node *x, double* dec_valu
   }
 }
 
-double svm_predict(const SVMModel *model, const Node *x)
+double PredictSVM(const SVMModel *model, const Node *x)
 {
   int nr_class = model->nr_class;
   double *dec_values;
@@ -2579,12 +2578,12 @@ double svm_predict(const SVMModel *model, const Node *x)
     dec_values = Malloc(double, 1);
   else
     dec_values = Malloc(double, nr_class*(nr_class-1)/2);
-  double pred_result = svm_predict_values(model, x, dec_values);
+  double pred_result = PredictValues(model, x, dec_values);
   free(dec_values);
   return pred_result;
 }
 
-double svm_predict_dec_values(const struct SVMModel *model, const struct Node *x, double** dec_values)
+double PredictDecisionValues(const struct SVMModel *model, const struct Node *x, double** dec_values)
 {
   int nr_class = model->nr_class;
   if(model->param.svm_type == ONE_CLASS ||
@@ -2593,7 +2592,7 @@ double svm_predict_dec_values(const struct SVMModel *model, const struct Node *x
     *dec_values = Malloc(double, 1);
   else
     *dec_values = Malloc(double, nr_class*(nr_class-1)/2);
-  double pred_result = svm_predict_values(model, x, *dec_values);
+  double pred_result = PredictValues(model, x, *dec_values);
   return pred_result;
 }
 
@@ -2606,7 +2605,7 @@ double svm_predict_probability(
     int i;
     int nr_class = model->nr_class;
     double *dec_values = Malloc(double, nr_class*(nr_class-1)/2);
-    svm_predict_values(model, x, dec_values);
+    PredictValues(model, x, dec_values);
 
     double min_prob=1e-7;
     double **pairwise_prob=Malloc(double *,nr_class);
@@ -2633,7 +2632,7 @@ double svm_predict_probability(
     return model->label[prob_max_idx];
   }
   else
-    return svm_predict(model, x);
+    return PredictSVM(model, x);
 }
 
 static const char *svm_type_table[] =
@@ -2646,7 +2645,7 @@ static const char *kernel_type_table[]=
   "linear","polynomial","rbf","sigmoid","precomputed",NULL
 };
 
-int svm_save_model(const char *model_file_name, const SVMModel *model)
+int SaveSVMModel(const char *model_file_name, const SVMModel *model)
 {
   FILE *fp = fopen(model_file_name,"w");
   if(fp==NULL) return -1;
@@ -2878,7 +2877,7 @@ bool read_model_header(FILE *fp, SVMModel* model)
 
 }
 
-SVMModel *svm_load_model(const char *model_file_name)
+SVMModel *LoadSVMModel(const char *model_file_name)
 {
   FILE *fp = fopen(model_file_name,"rb");
   if(fp==NULL) return NULL;
@@ -3042,7 +3041,7 @@ void svm_free_model_content(SVMModel* model_ptr)
   }
 }
 
-void svm_free_and_destroy_model(SVMModel** model_ptr_ptr)
+void FreeSVMModel(SVMModel** model_ptr_ptr)
 {
   if(model_ptr_ptr != NULL && *model_ptr_ptr != NULL)
   {
@@ -3052,13 +3051,13 @@ void svm_free_and_destroy_model(SVMModel** model_ptr_ptr)
   }
 }
 
-void svm_destroy_param(SVMParameter* param)
+void FreeSVMParam(SVMParameter* param)
 {
   free(param->weight_label);
   free(param->weight);
 }
 
-const char *svm_check_parameter(const Problem *prob, const SVMParameter *param)
+const char *CheckSVMParameter(const Problem *prob, const SVMParameter *param)
 {
   // svm_type
 

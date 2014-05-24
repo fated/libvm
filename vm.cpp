@@ -127,9 +127,9 @@ struct Model *TrainVM(const struct Problem *train, const struct Parameter *param
       combined_decision_values[i] = 0;
     }
 
-    model->svm_model = svm_train(train, &param->svm_param);
+    model->svm_model = TrainSVM(train, &param->svm_param);
 
-    int num_classes = svm_get_nr_class(model->svm_model);
+    int num_classes = model->svm_model->nr_class;
     if (num_classes == 1) {
       std::cerr << "WARNING: training set only has one class. See README for details." << std::endl;
     }
@@ -140,7 +140,7 @@ struct Model *TrainVM(const struct Problem *train, const struct Parameter *param
     for (int i = 0; i < l; ++i) {
       double *decision_values = NULL;
       int label = 0;
-      double predict_label = svm_predict_dec_values(model->svm_model, train->x[i], &decision_values);
+      double predict_label = PredictDecisionValues(model->svm_model, train->x[i], &decision_values);
       for (int j = 0; j < num_classes; ++j) {
         if (predict_label == model->svm_model->label[j]) {
           label = j;
@@ -258,7 +258,7 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
 
       double *decision_values = NULL;
       int label = 0;
-      double predict_label = svm_predict_dec_values(model->svm_model, x, &decision_values);
+      double predict_label = PredictDecisionValues(model->svm_model, x, &decision_values);
       for (int j = 0; j < num_classes; ++j) {
         if (predict_label == labels[j]) {
           label = j;

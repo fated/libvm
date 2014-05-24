@@ -2,6 +2,8 @@
 #include <iostream>
 #include <fstream>
 
+void print_null(const char *s) {}
+
 void ExitWithHelp();
 void ParseCommandLine(int argc, char *argv[], char *train_file_name, char *test_file_name, char *output_file_name, char *model_file_name);
 
@@ -103,6 +105,7 @@ void ExitWithHelp()
 void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_file_name, char *output_file_name, char *model_file_name)
 {
   int i;
+  void (*print_func)(const char*) = NULL;
 
   param.knn_param.num_neighbors = 1;
   param.taxonomy_type = KNN;
@@ -159,6 +162,9 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
     param.svm_param.nr_weight = 0;
     param.svm_param.weight_label = NULL;
     param.svm_param.weight = NULL;
+
+    print_func = &print_null;
+    svm_set_print_string_function(print_func);
   }
 
   if ((i+1) >= argc)

@@ -34,6 +34,7 @@ int GetCategory(double combined_decision_values, int num_categories)
   if (category >= num_categories) {
     category = num_categories - 1;
   }
+
   return category;
 }
 
@@ -41,9 +42,9 @@ struct Model *TrainVM(const struct Problem *train, const struct Parameter *param
 {
   Model *model = new Model;
   model->param = *param;
+  int l = train->l;
 
   if (param->taxonomy_type == KNN) {
-    int l = train->l;
     int num_classes = 0;
     int num_neighbors = param->knn_param.num_neighbors;
     int *labels = NULL;
@@ -117,7 +118,6 @@ struct Model *TrainVM(const struct Problem *train, const struct Parameter *param
   }
 
   if (param->taxonomy_type == SVM) {
-    int l = train->l;
     int num_categories = param->num_categories;
     int *categories = new int[l];
     double *combined_decision_values = new double[l];
@@ -140,11 +140,9 @@ struct Model *TrainVM(const struct Problem *train, const struct Parameter *param
     for (int i = 0; i < l; ++i) {
       double *decision_values = NULL;
       int label = 0;
-      // int dec_l = num_classes*(num_classes-1)/2;
       double predict_label = svm_predict_dec_values(model->svm_model, train->x[i], &decision_values);
       for (int j = 0; j < num_classes; ++j) {
-        if (predict_label == model->svm_model->label[j])
-        {
+        if (predict_label == model->svm_model->label[j]) {
           label = j;
           break;
         }
@@ -175,18 +173,18 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
   int num_categories = model->num_categories;
   int *labels = model->labels;
   double predict_label;
+  int **f_matrix = new int*[num_classes];
+  int *alter_labels = new int[l];
 
-  if (param.taxonomy_type == KNN) {
-    int *alter_labels = new int[l];
-    int **f_matrix = new int*[num_classes];
-
-    for (int i = 0; i < num_classes; ++i) {
-      for (int j = 0; j < l; ++j) {
-        if (labels[i] == train->y[j]) {
-          alter_labels[j] = i;
-        }
+  for (int i = 0; i < num_classes; ++i) {
+    for (int j = 0; j < l; ++j) {
+      if (labels[i] == train->y[j]) {
+        alter_labels[j] = i;
       }
     }
+  }
+
+  if (param.taxonomy_type == KNN) {
     for (int i = 0; i < num_classes; ++i) {
       int *categories = new int[l+1];
       double **dist_neighbors = new double*[l+1];
@@ -243,58 +241,9 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
       delete[] label_neighbors;
       delete[] categories;
     }
-    delete[] alter_labels;
-
-    double **matrix = new double*[num_classes];
-    for (int i = 0; i < num_classes; ++i) {
-      matrix[i] = new double[num_classes];
-      int sum = 0;
-      for (int j = 0; j < num_classes; ++j)
-        sum += f_matrix[i][j];
-      for (int j = 0; j < num_classes; ++j)
-        matrix[i][j] = ((double) f_matrix[i][j]) / sum;
-    }
-
-    double *quality = new double[num_classes];
-    for (int j = 0; j < num_classes; ++j) {
-      quality[j] = matrix[0][j];
-      for (int i = 1; i < num_classes; ++i) {
-        if (matrix[i][j] < quality[j]) {
-          quality[j] = matrix[i][j];
-        }
-      }
-    }
-
-    int best = 0;
-    for (int i = 1; i < num_classes; ++i) {
-      if (quality[i] > quality[best]) {
-        best = i;
-      }
-    }
-
-    lower = quality[best];
-    upper = matrix[0][best];
-    for (int i = 1; i < num_classes; ++i) {
-      if (matrix[i][best] > upper) {
-        upper = matrix[i][best];
-      }
-    }
-
-    predict_label = labels[best];
-
-    delete[] quality;
-    for (int i = 0; i < num_classes; ++i) {
-      delete[] f_matrix[i];
-      delete[] matrix[i];
-    }
-    delete[] f_matrix;
-    delete[] matrix;
-
   }
 
   if (param.taxonomy_type == SVM) {
-    int **f_matrix = new int*[num_classes];
-
     for (int i = 0; i < num_classes; ++i) {
       int *categories = new int[l+1];
       f_matrix[i] = new int[num_classes];
@@ -308,76 +257,74 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
       categories[l] = -1;
 
       double *decision_values = NULL;
-      int lab_idx = 0;
-      // int dec_l = num_classes*(num_classes-1)/2;
+      int label = 0;
       double predict_label = svm_predict_dec_values(model->svm_model, x, &decision_values);
       for (int j = 0; j < num_classes; ++j) {
-        if (predict_label == labels[j])
-        {
-          lab_idx = j;
+        if (predict_label == labels[j]) {
+          label = j;
           break;
         }
       }
-      double combined_decision_values = CalcCombinedDecisionValues(decision_values, num_classes, lab_idx);;
+      double combined_decision_values = CalcCombinedDecisionValues(decision_values, num_classes, label);;
       categories[l] = GetCategory(combined_decision_values, num_categories);
       delete[] decision_values;
 
-      for (int j = 0; j < l; ++j)
-      {
-        if (categories[j] == categories[l])
-          for (int k = 0; k < num_classes; ++k)
-            if (labels[k] == train->y[j])
-            {
-              f_matrix[i][k]++;
-              break;
-            }
+      for (int j = 0; j < l; ++j) {
+        if (categories[j] == categories[l]) {
+          ++f_matrix[i][alter_labels[j]];
+        }
       }
       f_matrix[i][i]++;
 
       delete[] categories;
     }
-
-    double **matrix = new double*[num_classes];
-    for (int i = 0; i < num_classes; ++i) {
-      matrix[i] = new double[num_classes];
-      int sum = 0;
-      for (int j = 0; j < num_classes; ++j)
-        sum += f_matrix[i][j];
-      for (int j = 0; j < num_classes; ++j)
-        matrix[i][j] = ((double) f_matrix[i][j]) / sum;
-    }
-
-    double *quality = new double[num_classes];
-    for (int j = 0; j < num_classes; ++j) {
-      quality[j] = matrix[0][j];
-      for (int i = 1; i < num_classes; ++i)
-        if (matrix[i][j] < quality[j])
-          quality[j] = matrix[i][j];
-    }
-
-    int best = 0;
-    for (int i = 1; i < num_classes; ++i)
-      if (quality[i] > quality[best])
-        best = i;
-
-    lower = quality[best];
-    upper = matrix[0][best];
-    for (int i = 1; i < num_classes; ++i)
-      if (matrix[i][best] > upper)
-        upper = matrix[i][best];
-
-    predict_label = labels[best];
-
-    delete[] quality;
-    for (int i = 0; i < num_classes; ++i)
-    {
-      delete[] f_matrix[i];
-      delete[] matrix[i];
-    }
-    delete[] f_matrix;
-    delete[] matrix;
-
   }
+
+  double **matrix = new double*[num_classes];
+  for (int i = 0; i < num_classes; ++i) {
+    matrix[i] = new double[num_classes];
+    int sum = 0;
+    for (int j = 0; j < num_classes; ++j)
+      sum += f_matrix[i][j];
+    for (int j = 0; j < num_classes; ++j)
+      matrix[i][j] = ((double) f_matrix[i][j]) / sum;
+  }
+
+  double *quality = new double[num_classes];
+  for (int j = 0; j < num_classes; ++j) {
+    quality[j] = matrix[0][j];
+    for (int i = 1; i < num_classes; ++i) {
+      if (matrix[i][j] < quality[j]) {
+        quality[j] = matrix[i][j];
+      }
+    }
+  }
+
+  int best = 0;
+  for (int i = 1; i < num_classes; ++i) {
+    if (quality[i] > quality[best]) {
+      best = i;
+    }
+  }
+
+  lower = quality[best];
+  upper = matrix[0][best];
+  for (int i = 1; i < num_classes; ++i) {
+    if (matrix[i][best] > upper) {
+      upper = matrix[i][best];
+    }
+  }
+
+  predict_label = labels[best];
+
+  delete[] alter_labels;
+  delete[] quality;
+  for (int i = 0; i < num_classes; ++i) {
+    delete[] f_matrix[i];
+    delete[] matrix[i];
+  }
+  delete[] f_matrix;
+  delete[] matrix;
 
   return predict_label;
 }

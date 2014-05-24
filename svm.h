@@ -3,7 +3,7 @@
 
 #include "utilities.h"
 
-enum { C_SVC, NU_SVC, ONE_CLASS, EPSILON_SVR, NU_SVR };  /* svm_type */
+enum { C_SVC, NU_SVC };  /* svm_type */
 enum { LINEAR, POLY, RBF, SIGMOID, PRECOMPUTED }; /* kernel_type */
 
 struct SVMParameter
@@ -22,9 +22,7 @@ struct SVMParameter
   int *weight_label;  /* for C_SVC */
   double* weight;    /* for C_SVC */
   double nu;  /* for NU_SVC, ONE_CLASS, and NU_SVR */
-  double p;  /* for EPSILON_SVR */
   int shrinking;  /* use the shrinking heuristics */
-  int probability; /* do probability estimates */
 };
 
 //
@@ -38,8 +36,6 @@ struct SVMModel
   struct Node **SV;    /* SVs (SV[l]) */
   double **sv_coef;  /* coefficients for SVs in decision functions (sv_coef[k-1][l]) */
   double *rho;    /* constants in decision functions (rho[k*(k-1)/2]) */
-  double *probA;    /* pariwise probability information */
-  double *probB;
   int *sv_indices;        /* sv_indices[0,...,nSV-1] are values in [1,...,num_traning_data] to indicate SVs in the training set */
 
   /* for classification only */
@@ -53,7 +49,6 @@ struct SVMModel
 };
 
 struct SVMModel *TrainSVM(const struct Problem *prob, const struct SVMParameter *param);
-void svm_cross_validation(const struct Problem *prob, const struct SVMParameter *param, int nr_fold, double *target);
 
 int SaveSVMModel(const char *model_file_name, const struct SVMModel *model);
 struct SVMModel *LoadSVMModel(const char *model_file_name);
@@ -63,18 +58,15 @@ int get_nr_class(const struct SVMModel *model);
 void get_labels(const struct SVMModel *model, int *label);
 void get_sv_indices(const struct SVMModel *model, int *sv_indices);
 int get_nr_sv(const struct SVMModel *model);
-double get_svr_probability(const struct SVMModel *model);
 
 double PredictValues(const struct SVMModel *model, const struct Node *x, double* dec_values);
 double PredictSVM(const struct SVMModel *model, const struct Node *x);
 double PredictDecisionValues(const struct SVMModel *model, const struct Node *x, double **dec_values);
-double svm_predict_probability(const struct SVMModel *model, const struct Node *x, double* prob_estimates);
 
 void FreeSVMModel(struct SVMModel **model_ptr_ptr);
 void FreeSVMParam(struct SVMParameter *param);
 
 const char *CheckSVMParameter(const struct Problem *prob, const struct SVMParameter *param);
-int svm_check_probability_model(const struct SVMModel *model);
 
 void svm_set_print_string_function(void (*print_func)(const char *));
 

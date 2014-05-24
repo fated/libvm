@@ -135,9 +135,7 @@ void ParseCommandLine(int argc, char **argv, char *data_file_name, char *output_
     param.svm_param.cache_size = 100;
     param.svm_param.C = 1;
     param.svm_param.eps = 1e-3;
-    param.svm_param.p = 0.1;
     param.svm_param.shrinking = 1;
-    param.svm_param.probability = 0;
     param.svm_param.nr_weight = 0;
     param.svm_param.weight_label = NULL;
     param.svm_param.weight = NULL;

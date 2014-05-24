@@ -1,31 +1,21 @@
-#include "utilities.h"
-#include "knn.h"
 #include "vm.h"
 #include <iostream>
 #include <fstream>
 #include <cmath>
 #include <random>
 
-template <typename T, typename S> static inline void clone(T *&dest, S *src, int size)
-{
-  dest = new T[size];
-  if (sizeof(T) < sizeof(S))
-    std::cerr << "WARNING: destination type is smaller than source type, data will be truncated." << std::endl;
-  std::copy(src, src+size, dest);
-}
-
-double CalcCombinedDecisionValues(const double *dec_values, int nr_class, int label)
+double CalcCombinedDecisionValues(const double *decision_values, int num_classes, int label)
 {
   double sum = 0;
   int k = 0, l = 0;
-  for (int i = 0; i < nr_class-1; ++i) {
-    for (int j = i+1; j < nr_class; ++j) {
+  for (int i = 0; i < num_classes-1; ++i) {
+    for (int j = i+1; j < num_classes; ++j) {
       if (i < label && j == label) {
-        sum -= dec_values[k]/2;
+        sum -= decision_values[k]/2;
         ++l;
       }
       if (i == label) {
-        sum += dec_values[k]/2;
+        sum += decision_values[k]/2;
         ++l;
       }
       ++k;
@@ -35,14 +25,14 @@ double CalcCombinedDecisionValues(const double *dec_values, int nr_class, int la
   return (sum / l) + label;
 }
 
-int GetCategory(double combine_dec, int nr_category)
+int GetCategory(double combined_decision_values, int num_categories)
 {
-  int category = floor(combine_dec);
+  int category = (int) std::floor(combined_decision_values);
   if (category < 0) {
     category = 0;
   }
-  if (category >= nr_category) {
-    category = nr_category - 1;
+  if (category >= num_categories) {
+    category = num_categories - 1;
   }
   return category;
 }
@@ -161,14 +151,14 @@ struct Model *TrainVM(const struct Problem *train, const struct Parameter *param
       }
       combined_decision_values[i] = CalcCombinedDecisionValues(decision_values, num_classes, label);
       categories[i] = GetCategory(combined_decision_values[i], num_categories);
-      free(decision_values);
+      delete[] decision_values;
     }
-    free(combined_decision_values);
+    delete[] combined_decision_values;
     model->num_classes = num_classes;
     model->l = l;
     model->labels = model->svm_model->label;
     model->categories = categories;
-    model->num_categories = param->num_categories;
+    model->num_categories = num_categories;
     model->dist_neighbors = NULL;
     model->label_neighbors = NULL;
   }
@@ -182,7 +172,7 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
   int l = model->l;
   int num_classes = model->num_classes;
   int num_neighbors = param.knn_param.num_neighbors;
-  int num_categories = param.num_categories;
+  int num_categories = model->num_categories;
   int *labels = model->labels;
   double predict_label;
 
@@ -304,18 +294,15 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
 
   if (param.taxonomy_type == SVM) {
     int **f_matrix = new int*[num_classes];
-    double y;
 
-    for (int i = 0; i < num_classes; ++i)
-    {
-      y = labels[i];
-
+    for (int i = 0; i < num_classes; ++i) {
       int *categories = new int[l+1];
       f_matrix[i] = new int[num_classes];
-      memset(f_matrix[i], 0, sizeof(int)*num_classes);
+      for (int j = 0; j < num_classes; ++j) {
+        f_matrix[i][j] = 0;
+      }
 
-      for (int j = 0; j < l; ++j)
-      {
+      for (int j = 0; j < l; ++j) {
         categories[j] = model->categories[j];
       }
       categories[l] = -1;
@@ -331,9 +318,9 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
           break;
         }
       }
-      double combine_dec = CalcCombinedDecisionValues(decision_values, num_classes, lab_idx);;
-      categories[l] = GetCategory(combine_dec, num_categories);
-      free(decision_values);
+      double combined_decision_values = CalcCombinedDecisionValues(decision_values, num_classes, lab_idx);;
+      categories[l] = GetCategory(combined_decision_values, num_categories);
+      delete[] decision_values;
 
       for (int j = 0; j < l; ++j)
       {

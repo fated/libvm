@@ -1,6 +1,8 @@
 #ifndef LIBVM_KNN_H_
 #define LIBVM_KNN_H_
 
+#include "utilities.h"
+
 struct KNNParameter
 {
   int num_neighbors;

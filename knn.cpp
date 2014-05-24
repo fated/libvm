@@ -1,4 +1,3 @@
-#include "utilities.h"
 #include "knn.h"
 #include <cmath>
 

@@ -8,7 +8,7 @@
 #include <limits.h>
 #include <locale.h>
 #include "svm.h"
-int libsvm_version = LIBSVM_VERSION;
+
 typedef float Qfloat;
 typedef signed char schar;
 #ifndef min
@@ -18,11 +18,6 @@ template <class T> static inline T min(T x,T y) { return (x<y)?x:y; }
 template <class T> static inline T max(T x,T y) { return (x>y)?x:y; }
 #endif
 template <class T> static inline void swap(T& x, T& y) { T t=x; x=y; y=t; }
-template <class S, class T> static inline void clone(T*& dst, S* src, int n)
-{
-  dst = new T[n];
-  memcpy((void *)dst,(void *)src,sizeof(T)*n);
-}
 static inline double powi(double base, int times)
 {
   double tmp = base, ret = 1.0;
@@ -36,7 +31,7 @@ static inline double powi(double base, int times)
 }
 #define INF HUGE_VAL
 #define TAU 1e-12
-#define Malloc(type,n) (type *)malloc((n)*sizeof(type))
+#define Malloc(type,n) (type *)malloc((unsigned long)(n)*sizeof(type))
 
 static void print_string_stdout(const char *s)
 {

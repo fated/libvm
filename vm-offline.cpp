@@ -1,5 +1,3 @@
-#include "utilities.h"
-#include "knn.h"
 #include "vm.h"
 #include <iostream>
 #include <fstream>

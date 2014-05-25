@@ -60,7 +60,7 @@ double PredictKNN(struct Problem *train, struct Node *x, const int num_neighbors
     neighbors[i] = INF;
     labels[i] = -1;
   }
-  for (int i = 0; i < train->l; ++i) {
+  for (int i = 0; i < train->num_ex; ++i) {
     double dist = CalcDist(train->x[i], x);
     int index = CompareDist(neighbors, dist, num_neighbors);
     if (index < num_neighbors) {

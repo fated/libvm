@@ -28,7 +28,7 @@ int main(int argc, char *argv[]) {
   prob = ReadProblem(data_file_name);
 
   if (param.taxonomy_type == SVM) {
-    param.svm_param.gamma = 1.0 / prob->max_index;
+    param.svm_param->gamma = 1.0 / prob->max_index;
   }
 
   std::ofstream output_file(output_file_name);
@@ -38,10 +38,10 @@ int main(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }
 
-  predict_labels = new double[prob->l];
-  lower_bounds = new double[prob->l];
-  upper_bounds = new double[prob->l];
-  indices = new int[prob->l];
+  predict_labels = new double[prob->num_ex];
+  lower_bounds = new double[prob->num_ex];
+  upper_bounds = new double[prob->num_ex];
+  indices = new int[prob->num_ex];
 
   std::chrono::time_point<std::chrono::steady_clock> start_time = std::chrono::high_resolution_clock::now();
 
@@ -51,7 +51,7 @@ int main(int argc, char *argv[]) {
 
   output_file << prob->y[indices[0]] << '\n';
 
-  for (int i = 1; i < prob->l; ++i) {
+  for (int i = 1; i < prob->num_ex; ++i) {
     avg_lower_bound += lower_bounds[i];
     avg_upper_bound += upper_bounds[i];
 
@@ -60,10 +60,10 @@ int main(int argc, char *argv[]) {
       ++num_correct;
     }
   }
-  avg_lower_bound /= prob->l - 1;
-  avg_upper_bound /= prob->l - 1;
+  avg_lower_bound /= prob->num_ex - 1;
+  avg_upper_bound /= prob->num_ex - 1;
 
-  printf("Accuracy: %g%% (%d/%d) Probabilities: [%.3f%%, %.3f%%]\n", 100.0*num_correct/(prob->l-1), num_correct, prob->l-1,
+  printf("Accuracy: %g%% (%d/%d) Probabilities: [%.3f%%, %.3f%%]\n", 100.0*num_correct/(prob->num_ex-1), num_correct, prob->num_ex-1,
       100*avg_lower_bound, 100*avg_upper_bound);
   output_file.close();
 
@@ -92,6 +92,7 @@ void ParseCommandLine(int argc, char **argv, char *data_file_name, char *output_
   int i;
 
   param.knn_param.num_neighbors = 1;
+  param.svm_param = NULL;
   param.taxonomy_type = KNN;
   param.save_model = 0;
   param.load_model = 0;
@@ -124,19 +125,20 @@ void ParseCommandLine(int argc, char **argv, char *data_file_name, char *output_
   }
 
   if (param.taxonomy_type == SVM) {
-    param.svm_param.svm_type = C_SVC;
-    param.svm_param.kernel_type = RBF;
-    param.svm_param.degree = 3;
-    param.svm_param.gamma = 0.1;  // 1/num_features
-    param.svm_param.coef0 = 0;
-    param.svm_param.nu = 0.5;
-    param.svm_param.cache_size = 100;
-    param.svm_param.C = 1;
-    param.svm_param.eps = 1e-3;
-    param.svm_param.shrinking = 1;
-    param.svm_param.num_weights = 0;
-    param.svm_param.weight_labels = NULL;
-    param.svm_param.weights = NULL;
+    param.svm_param = new SVMParameter;
+    param.svm_param->svm_type = C_SVC;
+    param.svm_param->kernel_type = RBF;
+    param.svm_param->degree = 3;
+    param.svm_param->gamma = 0.1;  // 1/num_features
+    param.svm_param->coef0 = 0;
+    param.svm_param->nu = 0.5;
+    param.svm_param->cache_size = 100;
+    param.svm_param->C = 1;
+    param.svm_param->eps = 1e-3;
+    param.svm_param->shrinking = 1;
+    param.svm_param->num_weights = 0;
+    param.svm_param->weight_labels = NULL;
+    param.svm_param->weights = NULL;
 
     SetPrintNull();
   }

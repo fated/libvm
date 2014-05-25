@@ -24,19 +24,17 @@ struct SVMParameter {
 
 struct SVMModel {
   struct SVMParameter param;
-  int num_classes;  // number of classes, = 2 in regression/one class svm
-  int total_sv;      /* total #SV */
-  struct Node **svs;    /* SVs (SV[l]) */
-  double **sv_coef;  /* coefficients for SVs in decision functions (sv_coef[k-1][l]) */
-  double *rho;    /* constants in decision functions (rho[k*(k-1)/2]) */
-  int *sv_indices;        /* sv_indices[0,...,nSV-1] are values in [1,...,num_traning_data] to indicate SVs in the training set */
-
-  int *labels;    /* label of each class (label[k]) */
-  int *num_svs;    /* number of SVs for each class (nSV[k]) */
-        /* nSV[0] + nSV[1] + ... + nSV[k-1] = l */
-  /* XXX */
-  int free_sv;    /* 1 if SVMModel is created by LoadSVMModel*/
-        /* 0 if SVMModel is created by TrainSVM */
+  int num_classes;  // number of classes (k)
+  int total_sv;  // total #SV
+  struct Node **svs;  // SVs (SV[total_sv])
+  double **sv_coef;  // coefficients for SVs in decision functions (sv_coef[k-1][total_sv])
+  double *rho;  // constants in decision functions (rho[k*(k-1)/2])
+  int *sv_indices;  // sv_indices[0,...,nSV-1] are values in [1,...,num_traning_data] to indicate SVs in the training set
+  int *labels;  // label of each class (label[k])
+  int *num_svs;  // number of SVs for each class (nSV[k])
+                 // nSV[0] + nSV[1] + ... + nSV[k-1] = total_sv
+  int free_sv;  // 1 if SVMModel is created by LoadSVMModel
+                // 0 if SVMModel is created by TrainSVM
 };
 
 struct SVMModel *TrainSVM(const struct Problem *prob, const struct SVMParameter *param);
@@ -44,14 +42,14 @@ struct SVMModel *TrainSVM(const struct Problem *prob, const struct SVMParameter 
 int SaveSVMModel(const char *model_file_name, const struct SVMModel *model);
 struct SVMModel *LoadSVMModel(const char *model_file_name);
 
-double PredictValues(const struct SVMModel *model, const struct Node *x, double* dec_values);
+double PredictValues(const struct SVMModel *model, const struct Node *x, double* decision_values);
 double PredictSVM(const struct SVMModel *model, const struct Node *x);
-double PredictDecisionValues(const struct SVMModel *model, const struct Node *x, double **dec_values);
+double PredictDecisionValues(const struct SVMModel *model, const struct Node *x, double **decision_values);
 
-void FreeSVMModel(struct SVMModel **model_ptr_ptr);
+void FreeSVMModel(struct SVMModel **model);
 void FreeSVMParam(struct SVMParameter *param);
 
-const char *CheckSVMParameter(const struct Problem *prob, const struct SVMParameter *param);
+const char *CheckSVMParameter(const struct SVMParameter *param);
 
 void SetPrintNull();
 void SetPrintCout();

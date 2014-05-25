@@ -1104,11 +1104,11 @@ double Solver_NU::calculate_rho() {
 //
 class SVC_Q : public Kernel {
  public:
-  SVC_Q(const Problem &prob, const SVMParameter &param, const schar *y_) : Kernel(prob.l, prob.x, param) {
-    clone(y, y_, prob.l);
-    cache = new Cache(prob.l, static_cast<long int>(param.cache_size*(1<<20)));
-    QD = new double[prob.l];
-    for (int i = 0; i < prob.l; ++i)
+  SVC_Q(const Problem &prob, const SVMParameter &param, const schar *y_) : Kernel(prob.num_ex, prob.x, param) {
+    clone(y, y_, prob.num_ex);
+    cache = new Cache(prob.num_ex, static_cast<long int>(param.cache_size*(1<<20)));
+    QD = new double[prob.num_ex];
+    for (int i = 0; i < prob.num_ex; ++i)
       QD[i] = (this->*kernel_function)(i, i);
   }
 
@@ -1149,11 +1149,11 @@ class SVC_Q : public Kernel {
 // construct and solve various formulations
 //
 static void SolveCSVC(const Problem *prob, const SVMParameter *param, double *alpha, Solver::SolutionInfo *si, double Cp, double Cn) {
-  int l = prob->l;
-  double *minus_ones = new double[l];
-  schar *y = new schar[l];
+  int num_ex = prob->num_ex;
+  double *minus_ones = new double[num_ex];
+  schar *y = new schar[num_ex];
 
-  for (int i = 0; i < l; ++i) {
+  for (int i = 0; i < num_ex; ++i) {
     alpha[i] = 0;
     minus_ones[i] = -1;
     if (prob->y[i] > 0) {
@@ -1164,16 +1164,16 @@ static void SolveCSVC(const Problem *prob, const SVMParameter *param, double *al
   }
 
   Solver s;
-  s.Solve(l, SVC_Q(*prob, *param,y), minus_ones, y, alpha, Cp, Cn, param->eps, si, param->shrinking);
+  s.Solve(num_ex, SVC_Q(*prob, *param,y), minus_ones, y, alpha, Cp, Cn, param->eps, si, param->shrinking);
 
   double sum_alpha=0;
-  for (int i = 0; i < l; ++i)
+  for (int i = 0; i < num_ex; ++i)
     sum_alpha += alpha[i];
 
   if (Cp == Cn)
-    info("nu = %f\n", sum_alpha/(Cp*prob->l));
+    info("nu = %f\n", sum_alpha/(Cp*prob->num_ex));
 
-  for (int i = 0; i < l; ++i)
+  for (int i = 0; i < num_ex; ++i)
     alpha[i] *= y[i];
 
   delete[] minus_ones;
@@ -1181,22 +1181,22 @@ static void SolveCSVC(const Problem *prob, const SVMParameter *param, double *al
 }
 
 static void SolveNuSVC(const Problem *prob, const SVMParameter *param, double *alpha, Solver::SolutionInfo *si) {
-  int l = prob->l;
+  int num_ex = prob->num_ex;
   double nu = param->nu;
 
-  schar *y = new schar[l];
+  schar *y = new schar[num_ex];
 
-  for (int i = 0; i < l; ++i)
+  for (int i = 0; i < num_ex; ++i)
     if (prob->y[i] > 0) {
       y[i] = +1;
     } else {
       y[i] = -1;
     }
 
-  double sum_pos = nu*l/2;
-  double sum_neg = nu*l/2;
+  double sum_pos = nu*num_ex/2;
+  double sum_neg = nu*num_ex/2;
 
-  for (int i = 0; i < l; ++i)
+  for (int i = 0; i < num_ex; ++i)
     if (y[i] == +1) {
       alpha[i] = std::min(1.0, sum_pos);
       sum_pos -= alpha[i];
@@ -1205,18 +1205,18 @@ static void SolveNuSVC(const Problem *prob, const SVMParameter *param, double *a
       sum_neg -= alpha[i];
     }
 
-  double *zeros = new double[l];
+  double *zeros = new double[num_ex];
 
-  for (int i = 0; i < l; ++i)
+  for (int i = 0; i < num_ex; ++i)
     zeros[i] = 0;
 
   Solver_NU s;
-  s.Solve(l, SVC_Q(*prob, *param,y), zeros, y, alpha, 1.0, 1.0, param->eps, si, param->shrinking);
+  s.Solve(num_ex, SVC_Q(*prob, *param,y), zeros, y, alpha, 1.0, 1.0, param->eps, si, param->shrinking);
   double r = si->r;
 
   info("C = %f\n", 1/r);
 
-  for (int i = 0; i < l; ++i)
+  for (int i = 0; i < num_ex; ++i)
     alpha[i] *= y[i]/r;
 
   si->rho /= r;
@@ -1237,7 +1237,7 @@ struct DecisionFunction {
 };
 
 static DecisionFunction TrainSingleSVM(const Problem *prob, const SVMParameter *param, double Cp, double Cn) {
-  double *alpha = new double[prob->l];
+  double *alpha = new double[prob->num_ex];
   Solver::SolutionInfo si;
   switch (param->svm_type) {
     case C_SVC: {
@@ -1259,7 +1259,7 @@ static DecisionFunction TrainSingleSVM(const Problem *prob, const SVMParameter *
   // output SVs
   int nSV = 0;
   int nBSV = 0;
-  for (int i = 0; i < prob->l; ++i) {
+  for (int i = 0; i < prob->num_ex; ++i) {
     if (fabs(alpha[i]) > 0) {
       ++nSV;
       if (prob->y[i] > 0) {
@@ -1283,14 +1283,14 @@ static DecisionFunction TrainSingleSVM(const Problem *prob, const SVMParameter *
 // label: label name, start: begin of each class, count: #data of classes, perm: indices to the original data
 // perm, length l, must be allocated before calling this subroutine
 static void GroupClasses(const Problem *prob, int *num_classes_ret, int **labels_ret, int **start_ret, int **count_ret, int *perm) {
-  int l = prob->l;
+  int num_ex = prob->num_ex;
   int max_num_classes = 16;
   int num_classes = 0;
   int *labels = new int[max_num_classes];
   int *count = new int[max_num_classes];
-  int *data_labels = new int[l];
+  int *data_labels = new int[num_ex];
 
-  for (int i = 0; i < l; ++i) {
+  for (int i = 0; i < num_ex; ++i) {
     int this_label = static_cast<int>(prob->y[i]);
     int j;
     for (j = 0; j < num_classes; ++j) {
@@ -1320,7 +1320,7 @@ static void GroupClasses(const Problem *prob, int *num_classes_ret, int **labels
   if (num_classes == 2 && labels[0] == -1 && labels[1] == 1) {
     std::swap(labels[0], labels[1]);
     std::swap(count[0], count[1]);
-    for (int i = 0; i < l; ++i) {
+    for (int i = 0; i < num_ex; ++i) {
       if (data_labels[i] == 0) {
         data_labels[i] = 1;
       } else {
@@ -1333,7 +1333,7 @@ static void GroupClasses(const Problem *prob, int *num_classes_ret, int **labels
   start[0] = 0;
   for (int i = 1; i < num_classes; ++i)
     start[i] = start[i-1] + count[i-1];
-  for (int i = 0; i < l; ++i) {
+  for (int i = 0; i < num_ex; ++i) {
     perm[start[data_labels[i]]] = i;
     ++start[data_labels[i]];
   }
@@ -1357,20 +1357,20 @@ SVMModel *TrainSVM(const Problem *prob, const SVMParameter *param) {
   model->free_sv = 0;  // XXX
 
   // classification
-  int l = prob->l;
+  int num_ex = prob->num_ex;
   int num_classes;
   int *labels = NULL;
   int *start = NULL;
   int *count = NULL;
-  int *perm = new int[l];
+  int *perm = new int[num_ex];
 
   // group training data of the same class
   GroupClasses(prob,&num_classes,&labels,&start,&count,perm);
   if (num_classes == 1)
     info("WARNING: training data in only one class. See README for details.\n");
 
-  Node **x = new Node*[l];
-  for (int i = 0; i < l; ++i)
+  Node **x = new Node*[num_ex];
+  for (int i = 0; i < num_ex; ++i)
     x[i] = prob->x[perm[i]];
 
   // calculate weighted C
@@ -1389,8 +1389,8 @@ SVMModel *TrainSVM(const Problem *prob, const SVMParameter *param) {
   }
 
   // train k*(k-1)/2 models
-  bool *nonzero = new bool[l];
-  for (int i = 0; i < l; ++i)
+  bool *nonzero = new bool[num_ex];
+  for (int i = 0; i < num_ex; ++i)
     nonzero[i] = false;
   DecisionFunction *f = new DecisionFunction[num_classes*(num_classes-1)/2];
 
@@ -1400,9 +1400,9 @@ SVMModel *TrainSVM(const Problem *prob, const SVMParameter *param) {
       Problem sub_prob;
       int si = start[i], sj = start[j];
       int ci = count[i], cj = count[j];
-      sub_prob.l = ci+cj;
-      sub_prob.x = new Node *[sub_prob.l];
-      sub_prob.y = new double[sub_prob.l];
+      sub_prob.num_ex = ci+cj;
+      sub_prob.x = new Node *[sub_prob.num_ex];
+      sub_prob.y = new double[sub_prob.num_ex];
       for (int k = 0; k < ci; ++k) {
         sub_prob.x[k] = x[si+k];
         sub_prob.y[k] = +1;
@@ -1455,7 +1455,7 @@ SVMModel *TrainSVM(const Problem *prob, const SVMParameter *param) {
   model->svs = new Node*[total_sv];
   model->sv_indices = new int[total_sv];
   p = 0;
-  for (int i = 0; i < l; ++i)
+  for (int i = 0; i < num_ex; ++i)
     if (nonzero[i]) {
       model->svs[p] = x[i];
       model->sv_indices[p] = perm[i] + 1;
@@ -1509,7 +1509,7 @@ SVMModel *TrainSVM(const Problem *prob, const SVMParameter *param) {
   return model;
 }
 
-double PredictSVMValues(const SVMModel *model, const Node *x, double *dec_values) {
+double PredictSVMValues(const SVMModel *model, const Node *x, double *decision_values) {
   int num_classes = model->num_classes;
   int total_sv = model->total_sv;
 
@@ -1542,9 +1542,9 @@ double PredictSVMValues(const SVMModel *model, const Node *x, double *dec_values
       for (int k = 0; k < cj; ++k)
         sum += coef2[sj+k] * kvalue[sj+k];
       sum -= model->rho[p];
-      dec_values[p] = sum;
+      decision_values[p] = sum;
 
-      if (dec_values[p] > 0) {
+      if (decision_values[p] > 0) {
         ++vote[i];
       } else {
         ++vote[j];
@@ -1566,22 +1566,22 @@ double PredictSVMValues(const SVMModel *model, const Node *x, double *dec_values
 
 double PredictSVM(const SVMModel *model, const Node *x) {
   int num_classes = model->num_classes;
-  double *dec_values = new double[num_classes*(num_classes-1)/2];
-  double pred_result = PredictSVMValues(model, x, dec_values);
-  delete[] dec_values;
+  double *decision_values = new double[num_classes*(num_classes-1)/2];
+  double pred_result = PredictSVMValues(model, x, decision_values);
+  delete[] decision_values;
   return pred_result;
 }
 
-double PredictDecisionValues(const struct SVMModel *model, const struct Node *x, double **dec_values) {
+double PredictDecisionValues(const struct SVMModel *model, const struct Node *x, double **decision_values) {
   int num_classes = model->num_classes;
-  *dec_values = new double[num_classes*(num_classes-1)/2];
-  double pred_result = PredictSVMValues(model, x, *dec_values);
+  *decision_values = new double[num_classes*(num_classes-1)/2];
+  double pred_result = PredictSVMValues(model, x, *decision_values);
   return pred_result;
 }
 
-static const char *svm_type_table[] = { "c_svc","nu_svc",NULL };
+static const char *svm_type_table[] = { "c_svc", "nu_svc", NULL };
 
-static const char *kernel_type_table[] = { "linear","polynomial","rbf","sigmoid","precomputed",NULL };
+static const char *kernel_type_table[] = { "linear", "polynomial", "rbf", "sigmoid", "precomputed", NULL };
 
 int SaveSVMModel(const char *model_file_name, const SVMModel *model) {
   FILE *fp = fopen(model_file_name, "w");
@@ -1849,67 +1849,80 @@ SVMModel *LoadSVMModel(const char *model_file_name) {
   return model;
 }
 
-void FreeSVMModelContent(SVMModel *model_ptr) {
-  if (model_ptr->free_sv && model_ptr->total_sv > 0 && model_ptr->svs != NULL)
-    delete[] model_ptr->svs;
-  if (model_ptr->sv_coef) {
-    for (int i = 0; i < model_ptr->num_classes-1; ++i)
-      delete[] model_ptr->sv_coef[i];
+void FreeSVMModelContent(SVMModel *model) {
+  if (model->free_sv && model->total_sv > 0 && model->svs != NULL) {
+    delete[] model->svs;
+    model->svs = NULL;
   }
 
-  if (model_ptr->svs) {
-    delete[] model_ptr->svs;
-    model_ptr->svs = NULL;
+  if (model->sv_coef) {
+    for (int i = 0; i < model->num_classes-1; ++i)
+      delete[] model->sv_coef[i];
   }
 
-  if (model_ptr->sv_coef) {
-    delete[] model_ptr->sv_coef;
-    model_ptr->sv_coef = NULL;
+  if (model->svs) {
+    delete[] model->svs;
+    model->svs = NULL;
   }
 
-  if (model_ptr->rho) {
-    delete[] model_ptr->rho;
-    model_ptr->rho = NULL;
+  if (model->sv_coef) {
+    delete[] model->sv_coef;
+    model->sv_coef = NULL;
   }
 
-  if (model_ptr->labels) {
-    delete[] model_ptr->labels;
-    model_ptr->labels= NULL;
+  if (model->rho) {
+    delete[] model->rho;
+    model->rho = NULL;
   }
 
-  if (model_ptr->sv_indices) {
-    delete[] model_ptr->sv_indices;
-    model_ptr->sv_indices = NULL;
+  if (model->labels) {
+    delete[] model->labels;
+    model->labels= NULL;
   }
 
-  if (model_ptr->num_svs) {
-    delete[] model_ptr->num_svs;
-    model_ptr->num_svs = NULL;
+  if (model->sv_indices) {
+    delete[] model->sv_indices;
+    model->sv_indices = NULL;
+  }
+
+  if (model->num_svs) {
+    delete[] model->num_svs;
+    model->num_svs = NULL;
   }
 }
 
-void FreeSVMModel(SVMModel** model_ptr_ptr)
+void FreeSVMModel(SVMModel** model)
 {
-  if (model_ptr_ptr != NULL && *model_ptr_ptr != NULL) {
-    FreeSVMModelContent(*model_ptr_ptr);
-    delete *model_ptr_ptr;
-    *model_ptr_ptr = NULL;
+  if (model != NULL && *model != NULL) {
+    FreeSVMModelContent(*model);
+    delete *model;
+    *model = NULL;
   }
+
+  return;
 }
 
 void FreeSVMParam(SVMParameter* param) {
-  delete[] param->weight_labels;
-  delete[] param->weights;
+  if (param->weight_labels) {
+    delete[] param->weight_labels;
+    param->weight_labels = NULL;
+  }
+  if (param->weights) {
+    delete[] param->weights;
+    param->weights = NULL;
+  }
+  delete param;
+  param = NULL;
+
+  return;
 }
 
-const char *CheckSVMParameter(const Problem *prob, const SVMParameter *param) {
-  // svm_type
+const char *CheckSVMParameter(const SVMParameter *param) {
   int svm_type = param->svm_type;
   if (svm_type != C_SVC &&
       svm_type != NU_SVC)
     return "unknown svm type";
 
-  // kernel_type, degree
   int kernel_type = param->kernel_type;
   if (kernel_type != LINEAR &&
       kernel_type != POLY &&
@@ -1924,7 +1937,6 @@ const char *CheckSVMParameter(const Problem *prob, const SVMParameter *param) {
   if (param->degree < 0)
     return "degree of polynomial kernel < 0";
 
-  // cache_size,eps,C,nu,p,shrinking
   if (param->cache_size <= 0)
     return "cache_size <= 0";
 
@@ -1942,50 +1954,6 @@ const char *CheckSVMParameter(const Problem *prob, const SVMParameter *param) {
   if (param->shrinking != 0 &&
       param->shrinking != 1)
     return "shrinking != 0 and shrinking != 1";
-
-  // check whether nu-svc is feasible
-  if (svm_type == NU_SVC) {
-    int l = prob->l;
-    int max_num_classes = 16;
-    int num_classes = 0;
-    int *labels = new int[max_num_classes];
-    int *count = new int[max_num_classes];
-
-    int i;
-    for (i = 0; i < l; ++i) {
-      int this_label = (int)prob->y[i];
-      int j;
-      for (j = 0; j < num_classes; ++j)
-        if (this_label == labels[j]) {
-          ++count[j];
-          break;
-        }
-      if (j == num_classes) {
-        if (num_classes == max_num_classes) {
-          max_num_classes *= 2;
-          labels = (int *)realloc(labels,(unsigned long)max_num_classes*sizeof(int));
-          count = (int *)realloc(count,(unsigned long)max_num_classes*sizeof(int));
-        }
-        labels[num_classes] = this_label;
-        count[num_classes] = 1;
-        ++num_classes;
-      }
-    }
-
-    for (i = 0; i < num_classes; ++i) {
-      int n1 = count[i];
-      for (int j = i+1; j < num_classes; ++j) {
-        int n2 = count[j];
-        if (param->nu*(n1+n2)/2 > std::min(n1,n2)) {
-          delete[] labels;
-          delete[] count;
-          return "specified nu is infeasible";
-        }
-      }
-    }
-    delete[] labels;
-    delete[] count;
-  }
 
   return NULL;
 }

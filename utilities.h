@@ -14,7 +14,7 @@ struct Node {
 };
 
 struct Problem {
-  int l;  // number of examples
+  int num_ex;  // number of examples
   int max_index;
   double *y;
   struct Node **x;

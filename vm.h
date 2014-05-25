@@ -9,7 +9,7 @@ enum { KNN, SVM };
 
 struct Parameter {
   struct KNNParameter knn_param;
-  struct SVMParameter svm_param;
+  struct SVMParameter *svm_param;
   int num_categories;
   int save_model;
   int load_model;
@@ -19,7 +19,7 @@ struct Parameter {
 struct Model {
   struct Parameter param;
   struct SVMModel *svm_model;
-  int l;
+  int num_ex;
   int num_classes;
   int num_categories;
   int *labels;
@@ -36,6 +36,7 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param, do
 int SaveModel(const char *model_file_name, const struct Model *model);
 struct Model *LoadModel(const char *model_file_name);
 void FreeModel(struct Model *model);
+void FreeParam(struct Parameter *param);
 
 const char *CheckParameter(const struct Parameter *param);
 

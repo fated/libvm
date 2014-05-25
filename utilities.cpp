@@ -18,20 +18,20 @@ struct Problem *ReadProblem(const char *file_name) {
     exit(EXIT_FAILURE);
   }
 
-  problem->l = 0;
+  problem->num_ex = 0;
   elements = 0;
 
   while (std::getline(input_file, line)) {
-    ++problem->l;
+    ++problem->num_ex;
   }
   input_file.clear();
   input_file.seekg(0);
 
-  problem->y = new double[problem->l];
-  problem->x = new Node*[problem->l];
+  problem->y = new double[problem->num_ex];
+  problem->x = new Node*[problem->num_ex];
 
   max_index = 0;
-  for (int i = 0; i < problem->l; ++i) {
+  for (int i = 0; i < problem->num_ex; ++i) {
     std::vector<std::string> tokens;
     std::size_t prev = 0, pos;
 
@@ -115,7 +115,7 @@ struct Problem *ReadProblem(const char *file_name) {
 
 void FreeProblem(struct Problem *problem) {
   delete[] problem->y;
-  for (int i = 0; i < problem->l; ++i) {
+  for (int i = 0; i < problem->num_ex; ++i) {
     delete[] problem->x[i];
   }
   delete[] problem->x;

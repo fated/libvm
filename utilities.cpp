@@ -6,8 +6,7 @@
 #include <cmath>
 #include <exception>
 
-struct Problem *ReadProblem(const char *file_name)
-{
+struct Problem *ReadProblem(const char *file_name) {
   std::string line;
   std::ifstream input_file(file_name);
   int max_index, current_max_index;
@@ -114,8 +113,7 @@ struct Problem *ReadProblem(const char *file_name)
   return problem;
 }
 
-void FreeProblem(struct Problem *problem)
-{
+void FreeProblem(struct Problem *problem) {
   delete[] problem->y;
   for (int i = 0; i < problem->l; ++i) {
     delete[] problem->x[i];

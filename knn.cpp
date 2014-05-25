@@ -1,8 +1,7 @@
 #include "knn.h"
 #include <cmath>
 
-double CalcDist(const struct Node *x1, const struct Node *x2)
-{
+double CalcDist(const struct Node *x1, const struct Node *x2) {
   double sum = 0;
 
   while (x1->index != -1 && x2->index != -1) {
@@ -36,8 +35,7 @@ double CalcDist(const struct Node *x1, const struct Node *x2)
   return sqrt(sum);
 }
 
-int CompareDist(double *neighbors, double dist, int num_neighbors)
-{
+int CompareDist(double *neighbors, double dist, int num_neighbors) {
   int i = 0;
 
   while (i < num_neighbors) {
@@ -54,8 +52,7 @@ int CompareDist(double *neighbors, double dist, int num_neighbors)
   return i;
 }
 
-double PredictKNN(struct Problem *train, struct Node *x, const int num_neighbors)
-{
+double PredictKNN(struct Problem *train, struct Node *x, const int num_neighbors) {
   double neighbors[num_neighbors];
   double labels[num_neighbors];
 

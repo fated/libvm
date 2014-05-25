@@ -4,8 +4,7 @@
 #include <cmath>
 #include <random>
 
-double CalcCombinedDecisionValues(const double *decision_values, int num_classes, int label)
-{
+double CalcCombinedDecisionValues(const double *decision_values, int num_classes, int label) {
   double sum = 0;
   int k = 0, l = 0;
   for (int i = 0; i < num_classes-1; ++i) {
@@ -25,9 +24,8 @@ double CalcCombinedDecisionValues(const double *decision_values, int num_classes
   return (sum / l) + label;
 }
 
-int GetCategory(double combined_decision_values, int num_categories)
-{
-  int category = (int) std::floor(combined_decision_values);
+int GetCategory(double combined_decision_values, int num_categories) {
+  int category = static_cast<int>(std::floor(combined_decision_values));
   if (category < 0) {
     category = 0;
   }
@@ -38,8 +36,7 @@ int GetCategory(double combined_decision_values, int num_categories)
   return category;
 }
 
-struct Model *TrainVM(const struct Problem *train, const struct Parameter *param)
-{
+struct Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
   Model *model = new Model;
   model->param = *param;
   int l = train->l;
@@ -52,14 +49,14 @@ struct Model *TrainVM(const struct Problem *train, const struct Parameter *param
 
     std::vector<int> unique_labels;
     for (int i = 0; i < l; ++i) {
-      int this_label = (int) train->y[i];
+      int this_label = static_cast<int>(train->y[i]);
       std::size_t j;
       for (j = 0; j < num_classes; ++j) {
         if (this_label == unique_labels[j]) {
           break;
         }
       }
-      alter_labels[i] = (int) j;
+      alter_labels[i] = static_cast<int>(j);
       if (j == num_classes) {
         unique_labels.push_back(this_label);
         ++num_classes;
@@ -164,8 +161,7 @@ struct Model *TrainVM(const struct Problem *train, const struct Parameter *param
   return model;
 }
 
-double PredictVM(const struct Problem *train, const struct Model *model, const struct Node *x, double &lower, double &upper)
-{
+double PredictVM(const struct Problem *train, const struct Model *model, const struct Node *x, double &lower, double &upper) {
   const Parameter& param = model->param;
   int l = model->l;
   int num_classes = model->num_classes;
@@ -287,7 +283,7 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
     for (int j = 0; j < num_classes; ++j)
       sum += f_matrix[i][j];
     for (int j = 0; j < num_classes; ++j)
-      matrix[i][j] = ((double) f_matrix[i][j]) / sum;
+      matrix[i][j] = static_cast<double>(f_matrix[i][j]) / sum;
   }
 
   double *quality = new double[num_classes];
@@ -329,8 +325,7 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
   return predict_label;
 }
 
-void OnlinePredict(const struct Problem *prob, const struct Parameter *param, double *predict_labels, int *indices, double *lower_bounds, double *upper_bounds)
-{
+void OnlinePredict(const struct Problem *prob, const struct Parameter *param, double *predict_labels, int *indices, double *lower_bounds, double *upper_bounds) {
   int l = prob->l;
   int num_neighbors = param->knn_param.num_neighbors;
   int num_classes = 0;
@@ -358,7 +353,7 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param, do
     categories[i] = -1;
   }
 
-  int this_label = (int) prob->y[indices[0]];
+  int this_label = static_cast<int>(prob->y[indices[0]]);
   labels.push_back(this_label);
   alter_labels[0] = 0;
   num_classes = 1;
@@ -432,7 +427,7 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param, do
       for (int k = 0; k < num_classes; ++k)
         sum += f_matrix[j][k];
       for (int k = 0; k < num_classes; ++k)
-        matrix[j][k] = ((double) f_matrix[j][k]) / sum;
+        matrix[j][k] = static_cast<double>(f_matrix[j][k]) / sum;
     }
 
     double *quality = new double[num_classes];
@@ -460,7 +455,7 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param, do
       }
     }
 
-    predict_labels[i] = labels[(std::size_t)best];
+    predict_labels[i] = labels[static_cast<std::size_t>(best)];
 
     delete[] quality;
     for (int j = 0; j < num_classes; ++j) {
@@ -470,14 +465,14 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param, do
     delete[] f_matrix;
     delete[] matrix;
 
-    this_label = (int) prob->y[indices[i]];
+    this_label = static_cast<int>(prob->y[indices[i]]);
     std::size_t j;
     for (j = 0; j < num_classes; ++j) {
       if (this_label == labels[j]) {
         break;
       }
     }
-    alter_labels[i] = (int) j;
+    alter_labels[i] = static_cast<int>(j);
     if (j == num_classes) {
       labels.push_back(this_label);
       ++num_classes;
@@ -507,8 +502,7 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param, do
   return;
 }
 
-int SaveModel(const char *model_file_name, const struct Model *model)
-{
+int SaveModel(const char *model_file_name, const struct Model *model) {
   std::ofstream model_file(model_file_name);
   if (!model_file.is_open()) {
     std::cerr << "Unable to open model file: " << model_file_name << std::endl;
@@ -565,8 +559,7 @@ int SaveModel(const char *model_file_name, const struct Model *model)
   return 0;
 }
 
-struct Model *LoadModel(const char *model_file_name)
-{
+struct Model *LoadModel(const char *model_file_name) {
   std::ifstream model_file(model_file_name);
   if (!model_file.is_open()) {
     std::cerr << "Unable to open model file: " << model_file_name << std::endl;
@@ -642,8 +635,7 @@ struct Model *LoadModel(const char *model_file_name)
   return model;
 }
 
-void FreeModel(struct Model *model)
-{
+void FreeModel(struct Model *model) {
   if (model->labels != NULL) {
     delete[] model->labels;
   }
@@ -665,8 +657,7 @@ void FreeModel(struct Model *model)
   return;
 }
 
-const char *CheckParameter(const struct Parameter *param)
-{
+const char *CheckParameter(const struct Parameter *param) {
   if (param->knn_param.num_neighbors < 1) {
     return "num_neighbors should be greater than 0";
   }

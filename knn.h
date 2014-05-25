@@ -3,14 +3,12 @@
 
 #include "utilities.h"
 
-struct KNNParameter
-{
+struct KNNParameter {
   int num_neighbors;
 };
 
-template<typename T>
-void InsertLabel(T *labels, T label, int num_neighbors, int index)
-{
+template <typename T>
+static inline void InsertLabel(T *labels, T label, int num_neighbors, int index) {
   for (int i = num_neighbors-1; i > index; --i)
     labels[i] = labels[i-1];
   labels[index] = label;

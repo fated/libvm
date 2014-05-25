@@ -9,8 +9,7 @@ void ParseCommandLine(int argc, char *argv[], char *data_file_name, char *output
 
 struct Parameter param;
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
   char data_file_name[256];
   char output_file_name[256];
   struct Problem *prob;
@@ -81,8 +80,7 @@ int main(int argc, char *argv[])
   return 0;
 }
 
-void ExitWithHelp()
-{
+void ExitWithHelp() {
   std::cout << "Usage: vm-online [options] data_file [output_file]\n"
             << "options:\n"
             << "  -t taxonomy_type : set type of taxonomy (default 0)\n"
@@ -92,8 +90,7 @@ void ExitWithHelp()
   exit(EXIT_FAILURE);
 }
 
-void ParseCommandLine(int argc, char **argv, char *data_file_name, char *output_file_name)
-{
+void ParseCommandLine(int argc, char **argv, char *data_file_name, char *output_file_name) {
   int i;
   void (*print_func)(const char*) = NULL;
 
@@ -103,25 +100,29 @@ void ParseCommandLine(int argc, char **argv, char *data_file_name, char *output_
   param.load_model = 0;
 
   for (i = 1; i < argc; ++i) {
-    if (argv[i][0] != '-')
-      break;
+    if (argv[i][0] != '-') break;
     if ((i+1) >= argc)
       ExitWithHelp();
     switch (argv[i][1]) {
-      case 't':
+      case 't': {
         ++i;
         param.taxonomy_type = atoi(argv[i]);
-      case 'k':
+        break;
+      }
+      case 'k': {
         ++i;
         param.knn_param.num_neighbors = atoi(argv[i]);
         break;
-      case 'c':
+      }
+      case 'c': {
         ++i;
         param.num_categories = atoi(argv[i]);
         break;
-      default:
+      }
+      default: {
         std::cerr << "Unknown option: -" << argv[i][1] << std::endl;
         ExitWithHelp();
+      }
     }
   }
 

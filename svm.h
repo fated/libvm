@@ -6,8 +6,7 @@
 enum { C_SVC, NU_SVC };  /* svm_type */
 enum { LINEAR, POLY, RBF, SIGMOID, PRECOMPUTED }; /* kernel_type */
 
-struct SVMParameter
-{
+struct SVMParameter {
   int svm_type;
   int kernel_type;
   int degree;  /* for poly */
@@ -20,7 +19,7 @@ struct SVMParameter
   double C;  /* for C_SVC, EPSILON_SVR and NU_SVR */
   int nr_weight;    /* for C_SVC */
   int *weight_label;  /* for C_SVC */
-  double* weight;    /* for C_SVC */
+  double *weight;    /* for C_SVC */
   double nu;  /* for NU_SVC, ONE_CLASS, and NU_SVR */
   int shrinking;  /* use the shrinking heuristics */
 };
@@ -28,8 +27,7 @@ struct SVMParameter
 //
 // SVMModel
 //
-struct SVMModel
-{
+struct SVMModel {
   struct SVMParameter param;  /* parameter */
   int nr_class;    /* number of classes, = 2 in regression/one class svm */
   int l;      /* total #SV */

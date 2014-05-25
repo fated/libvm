@@ -9,8 +9,7 @@ void ParseCommandLine(int argc, char *argv[], char *train_file_name, char *test_
 
 struct Parameter param;
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
   char train_file_name[256];
   char test_file_name[256];
   char output_file_name[256];
@@ -90,8 +89,7 @@ int main(int argc, char *argv[])
   return 0;
 }
 
-void ExitWithHelp()
-{
+void ExitWithHelp() {
   std::cout << "Usage: vm-offline [options] train_file test_file [output_file]\n"
             << "options:\n"
             << "  -t taxonomy_type : set type of taxonomy (default 0)\n"
@@ -102,8 +100,7 @@ void ExitWithHelp()
   exit(EXIT_FAILURE);
 }
 
-void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_file_name, char *output_file_name, char *model_file_name)
-{
+void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_file_name, char *output_file_name, char *model_file_name) {
   int i;
   void (*print_func)(const char*) = NULL;
 
@@ -113,36 +110,41 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
   param.load_model = 0;
 
   for (i = 1; i < argc; ++i) {
-    if (argv[i][0] != '-')
-      break;
+    if (argv[i][0] != '-') break;
     if ((i+2) >= argc)
       ExitWithHelp();
     switch (argv[i][1]) {
-      case 't':
+      case 't': {
         ++i;
         param.taxonomy_type = atoi(argv[i]);
         break;
-      case 'k':
+      }
+      case 'k': {
         ++i;
         param.knn_param.num_neighbors = atoi(argv[i]);
         break;
-      case 'c':
+      }
+      case 'c': {
         ++i;
         param.num_categories = atoi(argv[i]);
         break;
-      case 's':
+      }
+      case 's': {
         ++i;
         param.save_model = 1;
         strcpy(model_file_name, argv[i]);
         break;
-      case 'l':
+      }
+      case 'l': {
         ++i;
         param.load_model = 1;
         strcpy(model_file_name, argv[i]);
         break;
-      default:
+      }
+      default: {
         std::cerr << "Unknown option: -" << argv[i][1] << std::endl;
         ExitWithHelp();
+      }
     }
   }
 

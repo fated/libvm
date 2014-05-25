@@ -7,8 +7,7 @@
 
 enum { KNN, SVM };
 
-struct Parameter
-{
+struct Parameter {
   struct KNNParameter knn_param;
   struct SVMParameter svm_param;
   int num_categories;
@@ -17,8 +16,7 @@ struct Parameter
   int taxonomy_type;
 };
 
-struct Model
-{
+struct Model {
   struct Parameter param;
   struct SVMModel *svm_model;
   int l;

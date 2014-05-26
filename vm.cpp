@@ -325,12 +325,11 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
   return predict_label;
 }
 
-void OnlinePredict(const struct Problem *prob, const struct Parameter *param, double *predict_labels, int *indices, double *lower_bounds, double *upper_bounds) {
+void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
+    double *predict_labels, int *indices,
+    double *lower_bounds, double *upper_bounds) {
   int num_ex = prob->num_ex;
-  int num_neighbors = param->knn_param.num_neighbors;
   int num_classes = 0;
-  int *alter_labels = new int[num_ex];
-  std::vector<int> labels;
 
   for (int i = 0; i < num_ex; ++i) {
     indices[i] = i;
@@ -339,165 +338,194 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param, do
   std::mt19937 g(rd());
   std::shuffle(indices, indices+num_ex, g);
 
-  int *categories = new int[num_ex];
-  double **dist_neighbors = new double*[num_ex];
-  int **label_neighbors = new int*[num_ex];
+  if (param->taxonomy_type == KNN) {
+    int num_neighbors = param->knn_param.num_neighbors;
+    int *alter_labels = new int[num_ex];
+    std::vector<int> labels;
 
-  for (int i = 0; i < num_ex; ++i) {
-    dist_neighbors[i] = new double[num_neighbors];
-    label_neighbors[i] = new int[num_neighbors];
-    for (int j = 0; j < num_neighbors; ++j) {
-      dist_neighbors[i][j] = INF;
-      label_neighbors[i][j] = -1;
+    int *categories = new int[num_ex];
+    double **dist_neighbors = new double*[num_ex];
+    int **label_neighbors = new int*[num_ex];
+
+    for (int i = 0; i < num_ex; ++i) {
+      dist_neighbors[i] = new double[num_neighbors];
+      label_neighbors[i] = new int[num_neighbors];
+      for (int j = 0; j < num_neighbors; ++j) {
+        dist_neighbors[i][j] = INF;
+        label_neighbors[i][j] = -1;
+      }
+      categories[i] = -1;
     }
-    categories[i] = -1;
-  }
 
-  int this_label = static_cast<int>(prob->y[indices[0]]);
-  labels.push_back(this_label);
-  alter_labels[0] = 0;
-  num_classes = 1;
+    int this_label = static_cast<int>(prob->y[indices[0]]);
+    labels.push_back(this_label);
+    alter_labels[0] = 0;
+    num_classes = 1;
 
-  for (int i = 1; i < num_ex; ++i) {
-    if (num_classes == 1)
-      std::cerr << "WARNING: training set only has one class. See README for details." << std::endl;
+    for (int i = 1; i < num_ex; ++i) {
+      if (num_classes == 1)
+        std::cerr <<
+          "WARNING: training set only has one class. See README for details."
+                  << std::endl;
 
-    int **f_matrix = new int*[num_classes];
+      int **f_matrix = new int*[num_classes];
 
-    for (int j = 0; j < num_classes; ++j) {
-      f_matrix[j] = new int[num_classes];
-      for (int k = 0; k < num_classes; ++k) {
-        f_matrix[j][k] = 0;
+      for (int j = 0; j < num_classes; ++j) {
+        f_matrix[j] = new int[num_classes];
+        for (int k = 0; k < num_classes; ++k) {
+          f_matrix[j][k] = 0;
+        }
+
+        double **dist_neighbors_ = new double*[i+1];
+        int **label_neighbors_ = new int*[i+1];
+
+        for (int j = 0; j < i; ++j) {
+          clone(dist_neighbors_[j], dist_neighbors[j], num_neighbors);
+          clone(label_neighbors_[j], label_neighbors[j], num_neighbors);
+        }
+        dist_neighbors_[i] = new double[num_neighbors];
+        label_neighbors_[i] = new int[num_neighbors];
+        for (int j = 0; j < num_neighbors; ++j) {
+          dist_neighbors_[i][j] = INF;
+          label_neighbors_[i][j] = -1;
+        }
+
+        for (int k = 0; k < i; ++k) {
+          double dist = CalcDist(prob->x[indices[k]], prob->x[indices[i]]);
+          int index;
+
+          index = CompareDist(dist_neighbors_[i], dist, num_neighbors);
+          if (index < num_neighbors) {
+            InsertLabel(label_neighbors_[i], alter_labels[k], num_neighbors, index);
+          }
+          index = CompareDist(dist_neighbors_[k], dist, num_neighbors);
+          if (index < num_neighbors) {
+            InsertLabel(label_neighbors_[k], j, num_neighbors, index);
+          }
+        }
+        for (int k = 0; k <= i; ++k) {
+          categories[k] = FindMostFrequent(label_neighbors_[k], num_neighbors);
+        }
+
+        for (int k = 0; k < i; ++k) {
+          if (categories[k] == categories[i]) {
+            ++f_matrix[j][alter_labels[k]];
+          }
+        }
+        f_matrix[j][j]++;
+
+        for (int j = 0; j < num_neighbors; ++j) {
+          dist_neighbors[i][j] = dist_neighbors_[i][j];
+          label_neighbors[i][j] = label_neighbors_[i][j];
+        }
+        for (int j = 0; j < i+1; ++j) {
+          delete[] dist_neighbors_[j];
+          delete[] label_neighbors_[j];
+        }
+        delete[] dist_neighbors_;
+        delete[] label_neighbors_;
       }
 
-      double **dist_neighbors_ = new double*[i+1];
-      int **label_neighbors_ = new int*[i+1];
+      double **matrix = new double*[num_classes];
+      for (int j = 0; j < num_classes; ++j) {
+        matrix[j] = new double[num_classes];
+        int sum = 0;
+        for (int k = 0; k < num_classes; ++k)
+          sum += f_matrix[j][k];
+        for (int k = 0; k < num_classes; ++k)
+          matrix[j][k] = static_cast<double>(f_matrix[j][k]) / sum;
+      }
+
+      double *quality = new double[num_classes];
+      for (int j = 0; j < num_classes; ++j) {
+        quality[j] = matrix[0][j];
+        for (int k = 1; k < num_classes; ++k) {
+          if (matrix[k][j] < quality[j]) {
+            quality[j] = matrix[k][j];
+          }
+        }
+      }
+
+      int best = 0;
+      for (int j = 1; j < num_classes; ++j) {
+        if (quality[j] > quality[best]) {
+          best = j;
+        }
+      }
+
+      lower_bounds[i] = quality[best];
+      upper_bounds[i] = matrix[0][best];
+      for (int j = 1; j < num_classes; ++j) {
+        if (matrix[j][best] > upper_bounds[i]) {
+          upper_bounds[i] = matrix[j][best];
+        }
+      }
+
+      predict_labels[i] = labels[static_cast<std::size_t>(best)];
+
+      delete[] quality;
+      for (int j = 0; j < num_classes; ++j) {
+        delete[] f_matrix[j];
+        delete[] matrix[j];
+      }
+      delete[] f_matrix;
+      delete[] matrix;
+
+      this_label = static_cast<int>(prob->y[indices[i]]);
+      std::size_t j;
+      for (j = 0; j < num_classes; ++j) {
+        if (this_label == labels[j]) {
+          break;
+        }
+      }
+      alter_labels[i] = static_cast<int>(j);
+      if (j == num_classes) {
+        labels.push_back(this_label);
+        ++num_classes;
+      }
 
       for (int j = 0; j < i; ++j) {
-        clone(dist_neighbors_[j], dist_neighbors[j], num_neighbors);
-        clone(label_neighbors_[j], label_neighbors[j], num_neighbors);
-      }
-      dist_neighbors_[i] = new double[num_neighbors];
-      label_neighbors_[i] = new int[num_neighbors];
-      for (int j = 0; j < num_neighbors; ++j) {
-        dist_neighbors_[i][j] = INF;
-        label_neighbors_[i][j] = -1;
-      }
-
-      for (int k = 0; k < i; ++k) {
-        double dist = CalcDist(prob->x[indices[k]], prob->x[indices[i]]);
-        int index;
-
-        index = CompareDist(dist_neighbors_[i], dist, num_neighbors);
+        double dist = CalcDist(prob->x[indices[j]], prob->x[indices[i]]);
+        int index = CompareDist(dist_neighbors[j], dist, num_neighbors);
         if (index < num_neighbors) {
-          InsertLabel(label_neighbors_[i], alter_labels[k], num_neighbors, index);
-        }
-        index = CompareDist(dist_neighbors_[k], dist, num_neighbors);
-        if (index < num_neighbors) {
-          InsertLabel(label_neighbors_[k], j, num_neighbors, index);
+          InsertLabel(label_neighbors[j], alter_labels[i], num_neighbors, index);
         }
       }
-      for (int k = 0; k <= i; ++k) {
-        categories[k] = FindMostFrequent(label_neighbors_[k], num_neighbors);
-      }
 
-      for (int k = 0; k < i; ++k) {
-        if (categories[k] == categories[i]) {
-          ++f_matrix[j][alter_labels[k]];
-        }
-      }
-      f_matrix[j][j]++;
-
-      for (int j = 0; j < num_neighbors; ++j) {
-        dist_neighbors[i][j] = dist_neighbors_[i][j];
-        label_neighbors[i][j] = label_neighbors_[i][j];
-      }
-      for (int j = 0; j < i+1; ++j) {
-        delete[] dist_neighbors_[j];
-        delete[] label_neighbors_[j];
-      }
-      delete[] dist_neighbors_;
-      delete[] label_neighbors_;
     }
 
-    double **matrix = new double*[num_classes];
-    for (int j = 0; j < num_classes; ++j) {
-      matrix[j] = new double[num_classes];
-      int sum = 0;
-      for (int k = 0; k < num_classes; ++k)
-        sum += f_matrix[j][k];
-      for (int k = 0; k < num_classes; ++k)
-        matrix[j][k] = static_cast<double>(f_matrix[j][k]) / sum;
+    for (int i = 0; i < num_ex; ++i) {
+      delete[] dist_neighbors[i];
+      delete[] label_neighbors[i];
     }
 
-    double *quality = new double[num_classes];
-    for (int j = 0; j < num_classes; ++j) {
-      quality[j] = matrix[0][j];
-      for (int k = 1; k < num_classes; ++k) {
-        if (matrix[k][j] < quality[j]) {
-          quality[j] = matrix[k][j];
-        }
-      }
-    }
-
-    int best = 0;
-    for (int j = 1; j < num_classes; ++j) {
-      if (quality[j] > quality[best]) {
-        best = j;
-      }
-    }
-
-    lower_bounds[i] = quality[best];
-    upper_bounds[i] = matrix[0][best];
-    for (int j = 1; j < num_classes; ++j) {
-      if (matrix[j][best] > upper_bounds[i]) {
-        upper_bounds[i] = matrix[j][best];
-      }
-    }
-
-    predict_labels[i] = labels[static_cast<std::size_t>(best)];
-
-    delete[] quality;
-    for (int j = 0; j < num_classes; ++j) {
-      delete[] f_matrix[j];
-      delete[] matrix[j];
-    }
-    delete[] f_matrix;
-    delete[] matrix;
-
-    this_label = static_cast<int>(prob->y[indices[i]]);
-    std::size_t j;
-    for (j = 0; j < num_classes; ++j) {
-      if (this_label == labels[j]) {
-        break;
-      }
-    }
-    alter_labels[i] = static_cast<int>(j);
-    if (j == num_classes) {
-      labels.push_back(this_label);
-      ++num_classes;
-    }
-
-    for (int j = 0; j < i; ++j) {
-      double dist = CalcDist(prob->x[indices[j]], prob->x[indices[i]]);
-      int index = CompareDist(dist_neighbors[j], dist, num_neighbors);
-      if (index < num_neighbors) {
-        InsertLabel(label_neighbors[j], alter_labels[i], num_neighbors, index);
-      }
-    }
-
+    delete[] dist_neighbors;
+    delete[] label_neighbors;
+    delete[] categories;
+    delete[] alter_labels;
+    std::vector<int>(labels).swap(labels);
   }
 
-  for (int i = 0; i < num_ex; ++i) {
-    delete[] dist_neighbors[i];
-    delete[] label_neighbors[i];
-  }
+  if (param->taxonomy_type == SVM) {
+    Problem subprob;
+    subprob.x = new Node*[num_ex];
+    subprob.y = new double[num_ex];
 
-  delete[] dist_neighbors;
-  delete[] label_neighbors;
-  delete[] categories;
-  delete[] alter_labels;
-  std::vector<int>(labels).swap(labels);
+    for (int i = 0; i < num_ex; ++i) {
+      subprob.x[i] = prob->x[indices[i]];
+      subprob.y[i] = prob->y[indices[i]];
+    }
+
+    for (int i = 1; i < num_ex; ++i) {
+      subprob.num_ex = i;
+      Model *submodel = TrainVM(&subprob, param);
+      predict_labels[i] = PredictVM(&subprob, submodel, subprob.x[i],
+                                    lower_bounds[i], upper_bounds[i]);
+      FreeModel(submodel);
+    }
+    delete[] subprob.x;
+    delete[] subprob.y;
+  }
 
   return;
 }

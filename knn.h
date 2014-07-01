@@ -29,4 +29,9 @@ double PredictKNN(struct Problem *train, struct Node *x, const int num_neighbors
 double CalcDist(const struct Node *x1, const struct Node *x2);
 int CompareDist(double *neighbors, double dist, int num_neighbors);
 
+int SaveKNNModel(std::ofstream &model_file, const struct KNNModel *model);
+struct KNNModel *LoadKNNModel(std::ifstream &model_file);
+
+void InitKNNParam(struct KNNParameter *param);
+
 #endif  // LIBVM_KNN_H_

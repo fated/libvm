@@ -39,7 +39,7 @@ struct SVMModel {
 
 struct SVMModel *TrainSVM(const struct Problem *prob, const struct SVMParameter *param);
 
-int SaveSVMModel(const char *model_file_name, const struct SVMModel *model);
+int SaveSVMModel(std::ofstream &model_file, const struct SVMModel *model);
 struct SVMModel *LoadSVMModel(const char *model_file_name);
 
 double PredictValues(const struct SVMModel *model, const struct Node *x, double* decision_values);

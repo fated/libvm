@@ -1583,74 +1583,72 @@ static const char *svm_type_table[] = { "c_svc", "nu_svc", NULL };
 
 static const char *kernel_type_table[] = { "linear", "polynomial", "rbf", "sigmoid", "precomputed", NULL };
 
-int SaveSVMModel(const char *model_file_name, const SVMModel *model) {
-  FILE *fp = fopen(model_file_name, "w");
-  if (fp == NULL) return -1;
+int SaveSVMModel(std::ofstream &model_file, const struct SVMModel *model) {
+  // const SVMParameter& param = model->param;
 
-  const SVMParameter& param = model->param;
+  // fprintf(fp,"svm_type %s\n", svm_type_table[param.svm_type]);
+  // fprintf(fp,"kernel_type %s\n", kernel_type_table[param.kernel_type]);
 
-  fprintf(fp,"svm_type %s\n", svm_type_table[param.svm_type]);
-  fprintf(fp,"kernel_type %s\n", kernel_type_table[param.kernel_type]);
+  // if (param.kernel_type == POLY)
+  //   fprintf(fp,"degree %d\n", param.degree);
 
-  if (param.kernel_type == POLY)
-    fprintf(fp,"degree %d\n", param.degree);
+  // if (param.kernel_type == POLY || param.kernel_type == RBF || param.kernel_type == SIGMOID)
+  //   fprintf(fp,"gamma %g\n", param.gamma);
 
-  if (param.kernel_type == POLY || param.kernel_type == RBF || param.kernel_type == SIGMOID)
-    fprintf(fp,"gamma %g\n", param.gamma);
+  // if (param.kernel_type == POLY || param.kernel_type == SIGMOID)
+  //   fprintf(fp,"coef0 %g\n", param.coef0);
 
-  if (param.kernel_type == POLY || param.kernel_type == SIGMOID)
-    fprintf(fp,"coef0 %g\n", param.coef0);
+  // int num_classes = model->num_classes;
+  // int total_sv = model->total_sv;
+  // fprintf(fp, "num_classes %d\n", num_classes);
+  // fprintf(fp, "total_sv %d\n",total_sv);
 
-  int num_classes = model->num_classes;
-  int total_sv = model->total_sv;
-  fprintf(fp, "num_classes %d\n", num_classes);
-  fprintf(fp, "total_sv %d\n",total_sv);
+  // fprintf(fp, "rho");
+  // for(int i = 0; i < num_classes*(num_classes-1)/2; ++i)
+  //   fprintf(fp," %g",model->rho[i]);
+  // fprintf(fp, "\n");
 
-  fprintf(fp, "rho");
-  for(int i = 0; i < num_classes*(num_classes-1)/2; ++i)
-    fprintf(fp," %g",model->rho[i]);
-  fprintf(fp, "\n");
+  // if (model->labels) {
+  //   fprintf(fp, "labels");
+  //   for (int i = 0; i < num_classes; ++i)
+  //     fprintf(fp," %d",model->labels[i]);
+  //   fprintf(fp, "\n");
+  // }
 
-  if (model->labels) {
-    fprintf(fp, "labels");
-    for (int i = 0; i < num_classes; ++i)
-      fprintf(fp," %d",model->labels[i]);
-    fprintf(fp, "\n");
-  }
+  // if (model->num_svs) {
+  //   fprintf(fp, "nr_sv");
+  //   for (int i = 0; i < num_classes; ++i)
+  //     fprintf(fp," %d",model->num_svs[i]);
+  //   fprintf(fp, "\n");
+  // }
 
-  if (model->num_svs) {
-    fprintf(fp, "nr_sv");
-    for (int i = 0; i < num_classes; ++i)
-      fprintf(fp," %d",model->num_svs[i]);
-    fprintf(fp, "\n");
-  }
+  // fprintf(fp, "svs\n");
+  // const double *const *sv_coef = model->sv_coef;
+  // const Node *const *svs = model->svs;
 
-  fprintf(fp, "svs\n");
-  const double *const *sv_coef = model->sv_coef;
-  const Node *const *svs = model->svs;
+  // for (int i = 0; i < total_sv; ++i) {
+  //   for (int j = 0; j < num_classes-1; ++j)
+  //     fprintf(fp, "%.16g ",sv_coef[j][i]);
 
-  for (int i = 0; i < total_sv; ++i) {
-    for (int j = 0; j < num_classes-1; ++j)
-      fprintf(fp, "%.16g ",sv_coef[j][i]);
+  //   const Node *p = svs[i];
 
-    const Node *p = svs[i];
+  //   if (param.kernel_type == PRECOMPUTED) {
+  //     fprintf(fp,"0:%d ",(int)(p->value));
+  //   } else {
+  //     while (p->index != -1) {
+  //       fprintf(fp,"%d:%.8g ",p->index,p->value);
+  //       p++;
+  //     }
+  //   }
+  //   fprintf(fp, "\n");
+  // }
 
-    if (param.kernel_type == PRECOMPUTED) {
-      fprintf(fp,"0:%d ",(int)(p->value));
-    } else {
-      while (p->index != -1) {
-        fprintf(fp,"%d:%.8g ",p->index,p->value);
-        p++;
-      }
-    }
-    fprintf(fp, "\n");
-  }
-
-  if (ferror(fp) != 0 || fclose(fp) != 0) {
-    return -1;
-  } else {
-    return 0;
-  }
+  // if (ferror(fp) != 0 || fclose(fp) != 0) {
+  //   return -1;
+  // } else {
+  //   return 0;
+  // }
+  return 0;
 }
 
 static char *line = NULL;

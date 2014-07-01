@@ -29,6 +29,10 @@ int main(int argc, char *argv[]) {
   train = ReadProblem(train_file_name);
   test = ReadProblem(test_file_name);
 
+  if (param.taxonomy_type == KNN) {
+    param.num_categories = param.knn_param->num_neighbors;
+  }
+
   if (param.taxonomy_type == SVM_EL ||
       param.taxonomy_type == SVM_ES ||
       param.taxonomy_type == SVM_KM) {
@@ -125,12 +129,12 @@ void ExitWithHelp() {
 void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_file_name, char *output_file_name, char *model_file_name) {
   int i;
 
-  param.knn_param = new KNNParameter;
-  param.knn_param->num_neighbors = 1;
   param.svm_param = NULL;
   param.taxonomy_type = KNN;
   param.save_model = 0;
   param.load_model = 0;
+  param.knn_param = new KNNParameter;
+  InitKNNParam(param.knn_param);
 
   for (i = 1; i < argc; ++i) {
     if (argv[i][0] != '-') break;

@@ -114,6 +114,7 @@ struct Model *TrainVM(const struct Problem *train, const struct Parameter *param
     knn_model->labels = labels;
     knn_model->dist_neighbors = dist_neighbors;
     knn_model->label_neighbors = label_neighbors;
+    knn_model->param = *param->knn_param;
     model->knn_model = knn_model;
     model->categories = categories;
     clone(model->labels, model->knn_model->labels, num_classes);
@@ -539,6 +540,8 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
   return;
 }
 
+static const char *kTaxonomyTypeTable[] = { "knn", "svm_el", "svm_es", "svm_km", NULL };
+
 int SaveModel(const char *model_file_name, const struct Model *model) {
   std::ofstream model_file(model_file_name);
   if (!model_file.is_open()) {
@@ -547,49 +550,34 @@ int SaveModel(const char *model_file_name, const struct Model *model) {
   }
 
   const Parameter& param = model->param;
-  int num_neighbors = param.knn_param->num_neighbors;
+  model_file << "taxonomy_type " << kTaxonomyTypeTable[param.taxonomy_type] << '\n';
 
-  model_file << "num_neighbors " << num_neighbors << '\n';
-
-  int num_classes = model->num_classes;
   int num_ex = model->num_ex;
-  model_file << "num_classes " << num_classes << '\n';
+  int num_classes = model->num_classes;
   model_file << "num_examples " << num_ex << '\n';
+  model_file << "num_classes " << num_classes << '\n';
+  model_file << "num_categories " << param.num_categories << '\n';
 
-  if (model->labels) {
-    model_file << "labels";
-    for (int i = 0; i < num_classes; ++i) {
-      model_file << ' ' << model->labels[i];
-    }
-    model_file << '\n';
+  if (param.taxonomy_type == KNN) {
+    SaveKNNModel(model_file, model->knn_model);
+  }
+  if (param.taxonomy_type == SVM_EL ||
+      param.taxonomy_type == SVM_ES ||
+      param.taxonomy_type == SVM_KM) {
+    SaveSVMModel(model_file, model->svm_model);
   }
 
   if (model->categories) {
-    model_file << "categories";
+    model_file << "categories\n";
     for (int i = 0; i < num_ex; ++i) {
-      model_file << ' ' << model->categories[i];
+      model_file << model->categories[i] << ' ';
     }
     model_file << '\n';
   }
 
-  if (model->knn_model->dist_neighbors) {
-    model_file << "dist_neighbors\n";
-    for (int i = 0; i < num_ex; ++i) {
-      for (int j = 0; j < num_neighbors; ++j) {
-        model_file << model->knn_model->dist_neighbors[i][j] << ' ';
-      }
-    }
-    model_file << '\n';
-  }
-
-  if (model->knn_model->label_neighbors) {
-    model_file << "label_neighbors\n";
-    for (int i = 0; i < num_ex; ++i) {
-      for (int j = 0; j < num_neighbors; ++j) {
-        model_file << model->knn_model->label_neighbors[i][j] << ' ';
-      }
-    }
-    model_file << '\n';
+  if (model_file.bad() || model_file.fail()) {
+    model_file.close();
+    return -1;
   }
 
   model_file.close();

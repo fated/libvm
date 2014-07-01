@@ -33,6 +33,7 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param, do
 
 int SaveModel(const char *model_file_name, const struct Model *model);
 struct Model *LoadModel(const char *model_file_name);
+
 void FreeModel(struct Model *model);
 void FreeParam(struct Parameter *param);
 

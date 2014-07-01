@@ -5,7 +5,7 @@
 #include "knn.h"
 #include "svm.h"
 
-enum { KNN, SVM };
+enum { KNN, SVM_EL, SVM_ES, SVM_KM };
 
 struct Parameter {
   struct KNNParameter knn_param;

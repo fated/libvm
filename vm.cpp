@@ -114,7 +114,9 @@ struct Model *TrainVM(const struct Problem *train, const struct Parameter *param
     model->label_neighbors = label_neighbors;
   }
 
-  if (param->taxonomy_type == SVM) {
+  if (param->taxonomy_type == SVM_EL ||
+      param->taxonomy_type == SVM_ES ||
+      param->taxonomy_type == SVM_KM) {
     int num_categories = param->num_categories;
     int *categories = new int[num_ex];
     double *combined_decision_values = new double[num_ex];
@@ -239,7 +241,9 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
     }
   }
 
-  if (param.taxonomy_type == SVM) {
+  if (param.taxonomy_type == SVM_EL ||
+      param.taxonomy_type == SVM_ES ||
+      param.taxonomy_type == SVM_KM) {
     for (int i = 0; i < num_classes; ++i) {
       int *categories = new int[num_ex+1];
       f_matrix[i] = new int[num_classes];
@@ -506,7 +510,9 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
     std::vector<int>(labels).swap(labels);
   }
 
-  if (param->taxonomy_type == SVM) {
+  if (param->taxonomy_type == SVM_EL ||
+      param->taxonomy_type == SVM_ES ||
+      param->taxonomy_type == SVM_KM) {
     Problem subprob;
     subprob.x = new Node*[num_ex];
     subprob.y = new double[num_ex];
@@ -664,7 +670,10 @@ struct Model *LoadModel(const char *model_file_name) {
 }
 
 void FreeModel(struct Model *model) {
-  if (model->param.taxonomy_type == SVM && model->svm_model != NULL) {
+  if ((model->param.taxonomy_type == SVM_EL ||
+       model->param.taxonomy_type == SVM_ES ||
+       model->param.taxonomy_type == SVM_KM) &&
+      model->svm_model != NULL) {
     FreeSVMModel(&(model->svm_model));
     delete model->svm_model;
     model->svm_model = NULL;
@@ -698,7 +707,10 @@ void FreeModel(struct Model *model) {
 }
 
 void FreeParam(struct Parameter *param) {
-  if (param->taxonomy_type == SVM && param->svm_param != NULL) {
+  if ((param->taxonomy_type == SVM_EL ||
+       param->taxonomy_type == SVM_ES ||
+       param->taxonomy_type == SVM_KM) &&
+      param->svm_param != NULL) {
     FreeSVMParam(param->svm_param);
     param->svm_param = NULL;
   }
@@ -715,7 +727,9 @@ const char *CheckParameter(const struct Parameter *param) {
     return "cannot save and load model at the same time";
   }
 
-  if (param->taxonomy_type == SVM) {
+  if (param->taxonomy_type == SVM_EL ||
+      param->taxonomy_type == SVM_ES ||
+      param->taxonomy_type == SVM_KM) {
     if (param->svm_param == NULL) {
       return "no svm parameter";
     }

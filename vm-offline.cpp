@@ -3,6 +3,7 @@
 #include <fstream>
 
 void ExitWithHelp();
+void InitSVMParam();
 void ParseCommandLine(int argc, char *argv[], char *train_file_name, char *test_file_name, char *output_file_name, char *model_file_name);
 
 struct Parameter param;
@@ -29,7 +30,9 @@ int main(int argc, char *argv[]) {
   train = ReadProblem(train_file_name);
   test = ReadProblem(test_file_name);
 
-  if (param.taxonomy_type == SVM) {
+  if (param.taxonomy_type == SVM_EL ||
+      param.taxonomy_type == SVM_ES ||
+      param.taxonomy_type == SVM_KM) {
     param.svm_param->gamma = 1.0 / train->max_index;
   }
 
@@ -99,6 +102,28 @@ void ExitWithHelp() {
   exit(EXIT_FAILURE);
 }
 
+void InitSVMParam() {
+  param.svm_param = new SVMParameter;
+  param.svm_param->svm_type = C_SVC;
+  param.svm_param->kernel_type = RBF;
+  param.svm_param->degree = 3;
+  param.svm_param->gamma = 0.1;  // 1/num_features
+  param.svm_param->coef0 = 0;
+  param.svm_param->nu = 0.5;
+  param.svm_param->cache_size = 100;
+  param.svm_param->C = 1;
+  param.svm_param->eps = 1e-3;
+  param.svm_param->shrinking = 1;
+  param.svm_param->num_weights = 0;
+  param.svm_param->weight_labels = NULL;
+  param.svm_param->weights = NULL;
+
+  // SetPrintNull();
+  SetPrintCout();
+
+  return;
+}
+
 void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_file_name, char *output_file_name, char *model_file_name) {
   int i;
 
@@ -116,6 +141,11 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
       case 't': {
         ++i;
         param.taxonomy_type = atoi(argv[i]);
+        if (param.taxonomy_type == SVM_EL ||
+            param.taxonomy_type == SVM_ES ||
+            param.taxonomy_type == SVM_KM) {
+          InitSVMParam();
+        }
         break;
       }
       case 'k': {
@@ -140,31 +170,85 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
         strcpy(model_file_name, argv[i]);
         break;
       }
+      case 'p': {
+        if (argv[i][2]) {
+          switch (argv[i][2]) {
+            case 's': {
+              ++i;
+              param.svm_param->svm_type = atoi(argv[i]);
+              break;
+            }
+            case 't': {
+              ++i;
+              param.svm_param->kernel_type = atoi(argv[i]);
+              break;
+            }
+            case 'd': {
+              ++i;
+              param.svm_param->degree = atoi(argv[i]);
+              break;
+            }
+            case 'g': {
+              ++i;
+              param.svm_param->gamma = atof(argv[i]);
+              break;
+            }
+            case 'r': {
+              ++i;
+              param.svm_param->coef0 = atof(argv[i]);
+              break;
+            }
+            case 'n': {
+              ++i;
+              param.svm_param->nu = atof(argv[i]);
+              break;
+            }
+            case 'm': {
+              ++i;
+              param.svm_param->cache_size = atof(argv[i]);
+              break;
+            }
+            case 'c': {
+              ++i;
+              param.svm_param->C = atof(argv[i]);
+              break;
+            }
+            case 'e': {
+              ++i;
+              param.svm_param->eps = atof(argv[i]);
+              break;
+            }
+            case 'h': {
+              ++i;
+              param.svm_param->shrinking = atoi(argv[i]);
+              break;
+            }
+            case 'q': {
+              SetPrintNull();
+              break;
+            }
+            // case 'w': {// weight [option]: '-w1' means weight of '1'
+            //   ++i;
+            //   ++param.svm_param->num_weights;
+            //   param.svm_param->weight_labels = (int *)realloc(param.svm_param->weight_labels, sizeof(int)*param.svm_param->num_weights);
+            //   param.svm_param->weights = (double *)realloc(param.svm_param->weight, sizeof(double)*param.svm_param->num_weights);
+            //   param.svm_param->weight_labels[param.svm_param->num_weights-1] = atoi(argv[i-1][3]); // get and convert 'i' to int
+            //   param.svm_param->weights[param.svm_param->num_weights-1] = atof(argv[i]);
+            //   break;
+            // }
+            default: {
+              std::cerr << "Unknown SVM option: " << argv[i] << std::endl;
+              ExitWithHelp();
+            }
+          }
+        }
+        break;
+      }
       default: {
         std::cerr << "Unknown option: -" << argv[i][1] << std::endl;
         ExitWithHelp();
       }
     }
-  }
-
-  if (param.taxonomy_type == SVM) {
-    param.svm_param = new SVMParameter;
-    param.svm_param->svm_type = C_SVC;
-    param.svm_param->kernel_type = RBF;
-    param.svm_param->degree = 3;
-    param.svm_param->gamma = 0.1;  // 1/num_features
-    param.svm_param->coef0 = 0;
-    param.svm_param->nu = 0.5;
-    param.svm_param->cache_size = 100;
-    param.svm_param->C = 1;
-    param.svm_param->eps = 1e-3;
-    param.svm_param->shrinking = 1;
-    param.svm_param->num_weights = 0;
-    param.svm_param->weight_labels = NULL;
-    param.svm_param->weights = NULL;
-
-    SetPrintNull();
-    // SetPrintCout();
   }
 
   if ((i+1) >= argc)

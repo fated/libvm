@@ -113,7 +113,8 @@ void ExitWithHelp() {
 void ParseCommandLine(int argc, char **argv, char *data_file_name, char *output_file_name) {
   int i;
 
-  param.knn_param.num_neighbors = 1;
+  param.knn_param = new KNNParameter;
+  param.knn_param->num_neighbors = 1;
   param.svm_param = NULL;
   param.taxonomy_type = KNN;
   param.save_model = 0;
@@ -137,7 +138,7 @@ void ParseCommandLine(int argc, char **argv, char *data_file_name, char *output_
       }
       case 'k': {
         ++i;
-        param.knn_param.num_neighbors = atoi(argv[i]);
+        param.knn_param->num_neighbors = atoi(argv[i]);
         break;
       }
       case 'c': {

@@ -43,7 +43,7 @@ struct Model *TrainVM(const struct Problem *train, const struct Parameter *param
 
   if (param->taxonomy_type == KNN) {
     int num_classes = 0;
-    int num_neighbors = param->knn_param.num_neighbors;
+    int num_neighbors = param->knn_param->num_neighbors;
     int *labels = NULL;
     int *alter_labels = new int[num_ex];
 
@@ -106,12 +106,17 @@ struct Model *TrainVM(const struct Problem *train, const struct Parameter *param
     }
     delete[] alter_labels;
 
+    struct KNNModel *knn_model = new KNNModel;
     model->num_classes = num_classes;
     model->num_ex = num_ex;
-    model->labels = labels;
+    knn_model->num_ex = num_ex;
+    knn_model->num_classes = num_classes;
+    knn_model->labels = labels;
+    knn_model->dist_neighbors = dist_neighbors;
+    knn_model->label_neighbors = label_neighbors;
+    model->knn_model = knn_model;
     model->categories = categories;
-    model->dist_neighbors = dist_neighbors;
-    model->label_neighbors = label_neighbors;
+    clone(model->labels, model->knn_model->labels, num_classes);
   }
 
   if (param->taxonomy_type == SVM_EL ||
@@ -153,11 +158,9 @@ struct Model *TrainVM(const struct Problem *train, const struct Parameter *param
     delete[] combined_decision_values;
     model->num_classes = num_classes;
     model->num_ex = num_ex;
-    clone(model->labels, model->svm_model->labels, num_classes);
     model->categories = categories;
     model->num_categories = num_categories;
-    model->dist_neighbors = NULL;
-    model->label_neighbors = NULL;
+    clone(model->labels, model->svm_model->labels, num_classes);
   }
 
   return model;
@@ -167,7 +170,7 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
   const Parameter& param = model->param;
   int num_ex = model->num_ex;
   int num_classes = model->num_classes;
-  int num_neighbors = param.knn_param.num_neighbors;
+  int num_neighbors = param.knn_param->num_neighbors;
   int num_categories = model->num_categories;
   int *labels = model->labels;
   double predict_label;
@@ -193,8 +196,8 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
       }
 
       for (int j = 0; j < num_ex; ++j) {
-        clone(dist_neighbors[j], model->dist_neighbors[j], num_neighbors);
-        clone(label_neighbors[j], model->label_neighbors[j], num_neighbors);
+        clone(dist_neighbors[j], model->knn_model->dist_neighbors[j], num_neighbors);
+        clone(label_neighbors[j], model->knn_model->label_neighbors[j], num_neighbors);
         categories[j] = model->categories[j];
       }
       dist_neighbors[num_ex] = new double[num_neighbors];
@@ -343,7 +346,7 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
   std::shuffle(indices, indices+num_ex, g);
 
   if (param->taxonomy_type == KNN) {
-    int num_neighbors = param->knn_param.num_neighbors;
+    int num_neighbors = param->knn_param->num_neighbors;
     int *alter_labels = new int[num_ex];
     std::vector<int> labels;
 
@@ -544,7 +547,7 @@ int SaveModel(const char *model_file_name, const struct Model *model) {
   }
 
   const Parameter& param = model->param;
-  int num_neighbors = param.knn_param.num_neighbors;
+  int num_neighbors = param.knn_param->num_neighbors;
 
   model_file << "num_neighbors " << num_neighbors << '\n';
 
@@ -569,21 +572,21 @@ int SaveModel(const char *model_file_name, const struct Model *model) {
     model_file << '\n';
   }
 
-  if (model->dist_neighbors) {
+  if (model->knn_model->dist_neighbors) {
     model_file << "dist_neighbors\n";
     for (int i = 0; i < num_ex; ++i) {
       for (int j = 0; j < num_neighbors; ++j) {
-        model_file << model->dist_neighbors[i][j] << ' ';
+        model_file << model->knn_model->dist_neighbors[i][j] << ' ';
       }
     }
     model_file << '\n';
   }
 
-  if (model->label_neighbors) {
+  if (model->knn_model->label_neighbors) {
     model_file << "label_neighbors\n";
     for (int i = 0; i < num_ex; ++i) {
       for (int j = 0; j < num_neighbors; ++j) {
-        model_file << model->label_neighbors[i][j] << ' ';
+        model_file << model->knn_model->label_neighbors[i][j] << ' ';
       }
     }
     model_file << '\n';
@@ -605,15 +608,15 @@ struct Model *LoadModel(const char *model_file_name) {
   Parameter& param = model->param;
   model->labels = NULL;
   model->categories = NULL;
-  model->dist_neighbors = NULL;
-  model->label_neighbors = NULL;
+  model->knn_model->dist_neighbors = NULL;
+  model->knn_model->label_neighbors = NULL;
 
   char cmd[80];
   while (1) {
     model_file >> cmd;
 
     if (strcmp(cmd, "num_neighbors") == 0) {
-      model_file >> param.knn_param.num_neighbors;
+      model_file >> param.knn_param->num_neighbors;
     } else
     if (strcmp(cmd, "num_classes") == 0) {
       model_file >> model->num_classes;
@@ -636,24 +639,24 @@ struct Model *LoadModel(const char *model_file_name) {
       }
     } else
     if (strcmp(cmd, "dist_neighbors") == 0) {
-      int n = param.knn_param.num_neighbors;
+      int n = param.knn_param->num_neighbors;
       int num_ex = model->num_ex;
-      model->dist_neighbors = new double*[num_ex];
+      model->knn_model->dist_neighbors = new double*[num_ex];
       for (int i = 0; i < num_ex; ++i) {
-        model->dist_neighbors[i] = new double[n];
+        model->knn_model->dist_neighbors[i] = new double[n];
         for (int j = 0; j < n; ++j) {
-          model_file >> model->dist_neighbors[i][j];
+          model_file >> model->knn_model->dist_neighbors[i][j];
         }
       }
     } else
     if (strcmp(cmd, "label_neighbors") == 0) {
-      int n = param.knn_param.num_neighbors;
+      int n = param.knn_param->num_neighbors;
       int num_ex = model->num_ex;
-      model->label_neighbors = new int*[num_ex];
+      model->knn_model->label_neighbors = new int*[num_ex];
       for (int i = 0; i < num_ex; ++i) {
-        model->label_neighbors[i] = new int[n];
+        model->knn_model->label_neighbors[i] = new int[n];
         for (int j = 0; j < n; ++j) {
-          model_file >> model->label_neighbors[i][j];
+          model_file >> model->knn_model->label_neighbors[i][j];
         }
       }
       break;
@@ -689,15 +692,15 @@ void FreeModel(struct Model *model) {
     model->labels = NULL;
   }
 
-  if (model->dist_neighbors != NULL && model->label_neighbors != NULL) {
+  if (model->knn_model->dist_neighbors != NULL && model->knn_model->label_neighbors != NULL) {
     for (int i = 0; i < model->num_ex; ++i) {
-      delete[] model->dist_neighbors[i];
-      delete[] model->label_neighbors[i];
+      delete[] model->knn_model->dist_neighbors[i];
+      delete[] model->knn_model->label_neighbors[i];
     }
-    delete[] model->dist_neighbors;
-    delete[] model->label_neighbors;
-    model->dist_neighbors = NULL;
-    model->label_neighbors = NULL;
+    delete[] model->knn_model->dist_neighbors;
+    delete[] model->knn_model->label_neighbors;
+    model->knn_model->dist_neighbors = NULL;
+    model->knn_model->label_neighbors = NULL;
   }
 
   delete model;
@@ -719,7 +722,7 @@ void FreeParam(struct Parameter *param) {
 }
 
 const char *CheckParameter(const struct Parameter *param) {
-  if (param->knn_param.num_neighbors < 1) {
+  if (param->knn_param->num_neighbors < 1) {
     return "num_neighbors should be greater than 0";
   }
 

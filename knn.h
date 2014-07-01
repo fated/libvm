@@ -7,6 +7,15 @@ struct KNNParameter {
   int num_neighbors;
 };
 
+struct KNNModel {
+  struct KNNParameter param;
+  int num_ex;
+  int num_classes;
+  int *labels;  // label of each class (label[k])
+  double **dist_neighbors;
+  int **label_neighbors;
+};
+
 template <typename T>
 static inline void InsertLabel(T *labels, T label, int num_neighbors, int index) {
   for (int i = num_neighbors-1; i > index; --i)

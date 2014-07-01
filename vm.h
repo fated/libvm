@@ -8,7 +8,7 @@
 enum { KNN, SVM_EL, SVM_ES, SVM_KM };
 
 struct Parameter {
-  struct KNNParameter knn_param;
+  struct KNNParameter *knn_param;
   struct SVMParameter *svm_param;
   int num_categories;
   int save_model;
@@ -19,14 +19,12 @@ struct Parameter {
 struct Model {
   struct Parameter param;
   struct SVMModel *svm_model;
+  struct KNNModel *knn_model;
   int num_ex;
   int num_classes;
   int num_categories;
   int *labels;
   int *categories;
-
-  double **dist_neighbors;
-  int **label_neighbors;
 };
 
 struct Model *TrainVM(const struct Problem *train, const struct Parameter *param);

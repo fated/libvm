@@ -1958,6 +1958,25 @@ const char *CheckSVMParameter(const SVMParameter *param) {
   return NULL;
 }
 
+void InitSVMParam(struct SVMParameter *param) {
+  param->svm_type = C_SVC;
+  param->kernel_type = RBF;
+  param->degree = 3;
+  param->gamma = 0.1;  // 1/num_features
+  param->coef0 = 0;
+  param->nu = 0.5;
+  param->cache_size = 100;
+  param->C = 1;
+  param->eps = 1e-3;
+  param->shrinking = 1;
+  param->num_weights = 0;
+  param->weight_labels = NULL;
+  param->weights = NULL;
+  SetPrintCout();
+
+  return;
+}
+
 void SetPrintNull() {
   PrintString = &PrintNull;
 }

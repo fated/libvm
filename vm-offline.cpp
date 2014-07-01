@@ -3,7 +3,6 @@
 #include <fstream>
 
 void ExitWithHelp();
-void InitSVMParam();
 void ParseCommandLine(int argc, char *argv[], char *train_file_name, char *test_file_name, char *output_file_name, char *model_file_name);
 
 struct Parameter param;
@@ -98,30 +97,29 @@ void ExitWithHelp() {
             << "    0 -- k-nearest neighbors\n"
             << "    1 -- support vector machine\n"
             << "  -k num_neighbors : set number of neighbors in kNN (default 1)\n"
-            << "  -s model_file_name : set model file name\n";
+            << "  -s model_file_name : save model\n"
+            << "  -l model_file_name : load model\n"
+            << "  -p : prefix of options to set parameters for SVM\n"
+            << "    -ps svm_type : set type of SVM (default 0)\n"
+            << "      0 -- C-SVC    (multi-class classification)\n"
+            << "      1 -- nu-SVC   (multi-class classification)\n"
+            << "    -pt kernel_type : set type of kernel function (default 2)\n"
+            << "      0 -- linear: u'*v\n"
+            << "      1 -- polynomial: (gamma*u'*v + coef0)^degree\n"
+            << "      2 -- radial basis function: exp(-gamma*|u-v|^2)\n"
+            << "      3 -- sigmoid: tanh(gamma*u'*v + coef0)\n"
+            << "      4 -- precomputed kernel (kernel values in training_set_file)\n"
+            << "    -pd degree : set degree in kernel function (default 3)\n"
+            << "    -pg gamma : set gamma in kernel function (default 1/num_features)\n"
+            << "    -pr coef0 : set coef0 in kernel function (default 0)\n"
+            << "    -pc cost : set the parameter C of C-SVC (default 1)\n"
+            << "    -pn nu : set the parameter nu of nu-SVC (default 0.5)\n"
+            << "    -pm cachesize : set cache memory size in MB (default 100)\n"
+            << "    -pe epsilon : set tolerance of termination criterion (default 0.001)\n"
+            << "    -ph shrinking : whether to use the shrinking heuristics, 0 or 1 (default 1)\n"
+            << "    -pwi weights : set the parameter C of class i to weight*C, for C-SVC (default 1)\n"
+            << "    -pq : quiet mode (no outputs)\n";
   exit(EXIT_FAILURE);
-}
-
-void InitSVMParam() {
-  param.svm_param = new SVMParameter;
-  param.svm_param->svm_type = C_SVC;
-  param.svm_param->kernel_type = RBF;
-  param.svm_param->degree = 3;
-  param.svm_param->gamma = 0.1;  // 1/num_features
-  param.svm_param->coef0 = 0;
-  param.svm_param->nu = 0.5;
-  param.svm_param->cache_size = 100;
-  param.svm_param->C = 1;
-  param.svm_param->eps = 1e-3;
-  param.svm_param->shrinking = 1;
-  param.svm_param->num_weights = 0;
-  param.svm_param->weight_labels = NULL;
-  param.svm_param->weights = NULL;
-
-  // SetPrintNull();
-  SetPrintCout();
-
-  return;
 }
 
 void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_file_name, char *output_file_name, char *model_file_name) {
@@ -144,7 +142,8 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
         if (param.taxonomy_type == SVM_EL ||
             param.taxonomy_type == SVM_ES ||
             param.taxonomy_type == SVM_KM) {
-          InitSVMParam();
+          param.svm_param = new SVMParameter;
+          InitSVMParam(param.svm_param);
         }
         break;
       }
@@ -227,15 +226,16 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
               SetPrintNull();
               break;
             }
-            // case 'w': {// weight [option]: '-w1' means weight of '1'
-            //   ++i;
-            //   ++param.svm_param->num_weights;
-            //   param.svm_param->weight_labels = (int *)realloc(param.svm_param->weight_labels, sizeof(int)*param.svm_param->num_weights);
-            //   param.svm_param->weights = (double *)realloc(param.svm_param->weight, sizeof(double)*param.svm_param->num_weights);
-            //   param.svm_param->weight_labels[param.svm_param->num_weights-1] = atoi(argv[i-1][3]); // get and convert 'i' to int
-            //   param.svm_param->weights[param.svm_param->num_weights-1] = atof(argv[i]);
-            //   break;
-            // }
+            case 'w': {  // weights [option]: '-w1' means weight of '1'
+              ++i;
+              ++param.svm_param->num_weights;
+              param.svm_param->weight_labels = (int *)realloc(param.svm_param->weight_labels, sizeof(int)*static_cast<unsigned long int>(param.svm_param->num_weights));
+              param.svm_param->weights = (double *)realloc(param.svm_param->weights, sizeof(double)*static_cast<unsigned long int>(param.svm_param->num_weights));
+              param.svm_param->weight_labels[param.svm_param->num_weights-1] = atoi(&argv[i-1][3]); // get and convert 'i' to int
+              param.svm_param->weights[param.svm_param->num_weights-1] = atof(argv[i]);
+              break;
+              // TODO: change realloc function
+            }
             default: {
               std::cerr << "Unknown SVM option: " << argv[i] << std::endl;
               ExitWithHelp();

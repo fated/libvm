@@ -50,6 +50,7 @@ void FreeSVMModel(struct SVMModel **model);
 void FreeSVMParam(struct SVMParameter *param);
 
 const char *CheckSVMParameter(const struct SVMParameter *param);
+void InitSVMParam(struct SVMParameter *param);
 
 void SetPrintNull();
 void SetPrintCout();

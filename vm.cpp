@@ -171,13 +171,11 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
   const Parameter& param = model->param;
   int num_ex = model->num_ex;
   int num_classes = model->num_classes;
-  int num_neighbors = param.knn_param->num_neighbors;
   int num_categories = model->num_categories;
   int *labels = model->labels;
   double predict_label;
   int **f_matrix = new int*[num_classes];
   int *alter_labels = new int[num_ex];
-
   for (int i = 0; i < num_classes; ++i) {
     for (int j = 0; j < num_ex; ++j) {
       if (labels[i] == train->y[j]) {
@@ -187,6 +185,7 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
   }
 
   if (param.taxonomy_type == KNN) {
+    int num_neighbors = param.knn_param->num_neighbors;
     for (int i = 0; i < num_classes; ++i) {
       int *categories = new int[num_ex+1];
       double **dist_neighbors = new double*[num_ex+1];
@@ -269,10 +268,9 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
           break;
         }
       }
-      double combined_decision_values = CalcCombinedDecisionValues(decision_values, num_classes, label);;
+      double combined_decision_values = CalcCombinedDecisionValues(decision_values, num_classes, label);
       categories[num_ex] = GetCategory(combined_decision_values, num_categories);
       delete[] decision_values;
-
       for (int j = 0; j < num_ex; ++j) {
         if (categories[j] == categories[num_ex]) {
           ++f_matrix[i][alter_labels[j]];
@@ -549,14 +547,10 @@ int SaveModel(const char *model_file_name, const struct Model *model) {
     return -1;
   }
 
-  const Parameter& param = model->param;
-  model_file << "taxonomy_type " << kTaxonomyTypeTable[param.taxonomy_type] << '\n';
+  const Parameter &param = model->param;
 
-  int num_ex = model->num_ex;
-  int num_classes = model->num_classes;
-  model_file << "num_examples " << num_ex << '\n';
-  model_file << "num_classes " << num_classes << '\n';
-  model_file << "num_categories " << param.num_categories << '\n';
+  model_file << "taxonomy_type " << kTaxonomyTypeTable[param.taxonomy_type] << '\n';
+  model_file << "num_categories " << model->num_categories << '\n';
 
   if (param.taxonomy_type == KNN) {
     SaveKNNModel(model_file, model->knn_model);
@@ -569,7 +563,7 @@ int SaveModel(const char *model_file_name, const struct Model *model) {
 
   if (model->categories) {
     model_file << "categories\n";
-    for (int i = 0; i < num_ex; ++i) {
+    for (int i = 0; i < model->num_ex; ++i) {
       model_file << model->categories[i] << ' ';
     }
     model_file << '\n';
@@ -584,7 +578,7 @@ int SaveModel(const char *model_file_name, const struct Model *model) {
   return 0;
 }
 
-struct Model *LoadModel(const char *model_file_name) {
+Model *LoadModel(const char *model_file_name) {
   std::ifstream model_file(model_file_name);
   if (!model_file.is_open()) {
     std::cerr << "Unable to open model file: " << model_file_name << std::endl;
@@ -593,61 +587,60 @@ struct Model *LoadModel(const char *model_file_name) {
 
   Model *model = new Model;
 
-  Parameter& param = model->param;
+  Parameter &param = model->param;
+  param.load_model = 1;
   model->labels = NULL;
   model->categories = NULL;
-  model->knn_model->dist_neighbors = NULL;
-  model->knn_model->label_neighbors = NULL;
 
   char cmd[80];
   while (1) {
     model_file >> cmd;
 
-    if (strcmp(cmd, "num_neighbors") == 0) {
-      model_file >> param.knn_param->num_neighbors;
-    } else
-    if (strcmp(cmd, "num_classes") == 0) {
-      model_file >> model->num_classes;
-    } else
-    if (strcmp(cmd, "num_examples") == 0) {
-      model_file >> model->num_ex;
-    } else
-    if (strcmp(cmd, "labels") == 0) {
-      int n = model->num_classes;
-      model->labels = new int[n];
-      for (int i = 0; i < n; ++i) {
-        model_file >> model->labels[i];
+    if (std::strcmp(cmd, "taxonomy_type") == 0) {
+      model_file >> cmd;
+      int i;
+      for (i = 0; kTaxonomyTypeTable[i]; ++i) {
+        if (std::strcmp(kTaxonomyTypeTable[i], cmd) == 0) {
+          param.taxonomy_type = i;
+          break;
+        }
+      }
+      if (kTaxonomyTypeTable[i] == NULL) {
+        std::cerr << "Unknown taxonomy type.\n" << std::endl;
+        return NULL;
       }
     } else
-    if (strcmp(cmd, "categories") == 0) {
+    if (std::strcmp(cmd, "num_categories") == 0) {
+      model_file >> param.num_categories;
+      model->num_categories = param.num_categories;
+    } else
+    if (std::strcmp(cmd, "categories") == 0) {
       int num_ex = model->num_ex;
       model->categories = new int[num_ex];
       for (int i = 0; i < num_ex; ++i) {
         model_file >> model->categories[i];
       }
-    } else
-    if (strcmp(cmd, "dist_neighbors") == 0) {
-      int n = param.knn_param->num_neighbors;
-      int num_ex = model->num_ex;
-      model->knn_model->dist_neighbors = new double*[num_ex];
-      for (int i = 0; i < num_ex; ++i) {
-        model->knn_model->dist_neighbors[i] = new double[n];
-        for (int j = 0; j < n; ++j) {
-          model_file >> model->knn_model->dist_neighbors[i][j];
-        }
-      }
-    } else
-    if (strcmp(cmd, "label_neighbors") == 0) {
-      int n = param.knn_param->num_neighbors;
-      int num_ex = model->num_ex;
-      model->knn_model->label_neighbors = new int*[num_ex];
-      for (int i = 0; i < num_ex; ++i) {
-        model->knn_model->label_neighbors[i] = new int[n];
-        for (int j = 0; j < n; ++j) {
-          model_file >> model->knn_model->label_neighbors[i][j];
-        }
-      }
       break;
+    } else
+    if (std::strcmp(cmd, "knn_model") == 0) {
+      model->knn_model = LoadKNNModel(model_file);
+      if (model->knn_model == NULL) {
+        return NULL;
+      }
+      model->num_ex = model->knn_model->num_ex;
+      model->num_classes = model->knn_model->num_classes;
+      clone(model->labels, model->knn_model->labels, model->num_classes);
+      model->param.knn_param = &model->knn_model->param;
+    } else
+    if (std::strcmp(cmd, "svm_model") == 0) {
+      model->svm_model = LoadSVMModel(model_file);
+      if (model->svm_model == NULL) {
+        return NULL;
+      }
+      model->num_ex = model->svm_model->num_ex;
+      model->num_classes = model->svm_model->num_classes;
+      clone(model->labels, model->svm_model->labels, model->num_classes);
+      model->param.svm_param = &model->svm_model->param;
     } else {
       std::cerr << "Unknown text in model file: " << cmd << std::endl;
       FreeModel(model);
@@ -656,11 +649,17 @@ struct Model *LoadModel(const char *model_file_name) {
     }
   }
   model_file.close();
-
   return model;
 }
 
 void FreeModel(struct Model *model) {
+  if (model->param.taxonomy_type == KNN &&
+      model->knn_model != NULL) {
+    FreeKNNModel(model->knn_model);
+    delete model->knn_model;
+    model->knn_model = NULL;
+  }
+
   if ((model->param.taxonomy_type == SVM_EL ||
        model->param.taxonomy_type == SVM_ES ||
        model->param.taxonomy_type == SVM_KM) &&
@@ -680,17 +679,6 @@ void FreeModel(struct Model *model) {
     model->labels = NULL;
   }
 
-  if (model->knn_model->dist_neighbors != NULL && model->knn_model->label_neighbors != NULL) {
-    for (int i = 0; i < model->num_ex; ++i) {
-      delete[] model->knn_model->dist_neighbors[i];
-      delete[] model->knn_model->label_neighbors[i];
-    }
-    delete[] model->knn_model->dist_neighbors;
-    delete[] model->knn_model->label_neighbors;
-    model->knn_model->dist_neighbors = NULL;
-    model->knn_model->label_neighbors = NULL;
-  }
-
   delete model;
   model = NULL;
 
@@ -698,6 +686,12 @@ void FreeModel(struct Model *model) {
 }
 
 void FreeParam(struct Parameter *param) {
+  if (param->taxonomy_type == KNN &&
+      param->knn_param != NULL) {
+    FreeKNNParam(param->knn_param);
+    param->knn_param = NULL;
+  }
+
   if ((param->taxonomy_type == SVM_EL ||
        param->taxonomy_type == SVM_ES ||
        param->taxonomy_type == SVM_KM) &&

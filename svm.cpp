@@ -1,7 +1,12 @@
 #include "svm.h"
 #include <cmath>
 #include <iostream>
+#include <fstream>
+#include <iomanip>
 #include <cstdarg>
+#include <string>
+#include <vector>
+#include <exception>
 
 typedef float Qfloat;
 typedef signed char schar;
@@ -1426,6 +1431,7 @@ SVMModel *TrainSVM(const Problem *prob, const SVMParameter *param) {
 
   // build output
   model->num_classes = num_classes;
+  model->num_ex = num_ex;
 
   model->labels = new int[num_classes];
   for (int i = 0; i < num_classes; ++i)
@@ -1579,271 +1585,267 @@ double PredictDecisionValues(const struct SVMModel *model, const struct Node *x,
   return pred_result;
 }
 
-static const char *svm_type_table[] = { "c_svc", "nu_svc", NULL };
+static const char *kSVMTypeTable[] = { "c_svc", "nu_svc", NULL };
 
-static const char *kernel_type_table[] = { "linear", "polynomial", "rbf", "sigmoid", "precomputed", NULL };
+static const char *kKernelTypeTable[] = { "linear", "polynomial", "rbf", "sigmoid", "precomputed", NULL };
 
 int SaveSVMModel(std::ofstream &model_file, const struct SVMModel *model) {
-  // const SVMParameter& param = model->param;
+  const SVMParameter &param = model->param;
 
-  // fprintf(fp,"svm_type %s\n", svm_type_table[param.svm_type]);
-  // fprintf(fp,"kernel_type %s\n", kernel_type_table[param.kernel_type]);
+  model_file << "svm_model\n";
+  model_file << "svm_type " << kSVMTypeTable[param.svm_type] << '\n';
+  model_file << "kernel_type " << kKernelTypeTable[param.kernel_type] << '\n';
 
-  // if (param.kernel_type == POLY)
-  //   fprintf(fp,"degree %d\n", param.degree);
+  if (param.kernel_type == POLY) {
+    model_file << "degree " << param.degree << '\n';
+  }
+  if (param.kernel_type == POLY ||
+      param.kernel_type == RBF  ||
+      param.kernel_type == SIGMOID) {
+    model_file << "gamma " << param.gamma << '\n';
+  }
+  if (param.kernel_type == POLY ||
+      param.kernel_type == SIGMOID) {
+    model_file << "coef0 " << param.coef0 << '\n';
+  }
 
-  // if (param.kernel_type == POLY || param.kernel_type == RBF || param.kernel_type == SIGMOID)
-  //   fprintf(fp,"gamma %g\n", param.gamma);
+  int num_classes = model->num_classes;
+  int total_sv = model->total_sv;
+  model_file << "num_examples " << model->num_ex << '\n';
+  model_file << "num_classes " << num_classes << '\n';
+  model_file << "total_SV " << total_sv << '\n';
 
-  // if (param.kernel_type == POLY || param.kernel_type == SIGMOID)
-  //   fprintf(fp,"coef0 %g\n", param.coef0);
+  if (model->labels) {
+    model_file << "labels";
+    for (int i = 0; i < num_classes; ++i)
+      model_file << ' ' << model->labels[i];
+    model_file << '\n';
+  }
 
-  // int num_classes = model->num_classes;
-  // int total_sv = model->total_sv;
-  // fprintf(fp, "num_classes %d\n", num_classes);
-  // fprintf(fp, "total_sv %d\n",total_sv);
+  if (model->rho) {
+    model_file << "rho";
+    for (int i = 0; i < num_classes*(num_classes-1)/2; ++i)
+      model_file << ' ' << model->rho[i];
+    model_file << '\n';
+  }
 
-  // fprintf(fp, "rho");
-  // for(int i = 0; i < num_classes*(num_classes-1)/2; ++i)
-  //   fprintf(fp," %g",model->rho[i]);
-  // fprintf(fp, "\n");
+  if (model->num_svs) {
+    model_file << "num_SVs";
+    for (int i = 0; i < num_classes; ++i)
+      model_file << ' ' << model->num_svs[i];
+    model_file << '\n';
+  }
 
-  // if (model->labels) {
-  //   fprintf(fp, "labels");
-  //   for (int i = 0; i < num_classes; ++i)
-  //     fprintf(fp," %d",model->labels[i]);
-  //   fprintf(fp, "\n");
-  // }
+  if (model->sv_indices) {
+    model_file << "SV_indices\n";
+    for (int i = 0; i < total_sv; ++i)
+      model_file << model->sv_indices[i] << ' ';
+    model_file << '\n';
+  }
 
-  // if (model->num_svs) {
-  //   fprintf(fp, "nr_sv");
-  //   for (int i = 0; i < num_classes; ++i)
-  //     fprintf(fp," %d",model->num_svs[i]);
-  //   fprintf(fp, "\n");
-  // }
+  model_file << "SVs\n";
+  const double *const *sv_coef = model->sv_coef;
+  const Node *const *svs = model->svs;
 
-  // fprintf(fp, "svs\n");
-  // const double *const *sv_coef = model->sv_coef;
-  // const Node *const *svs = model->svs;
+  for (int i = 0; i < total_sv; ++i) {
+    for (int j = 0; j < num_classes-1; ++j)
+      model_file << std::setprecision(16) << (sv_coef[j][i]+0.0) << ' ';  // add "+0.0" to avoid negative zero in output
 
-  // for (int i = 0; i < total_sv; ++i) {
-  //   for (int j = 0; j < num_classes-1; ++j)
-  //     fprintf(fp, "%.16g ",sv_coef[j][i]);
+    const Node *p = svs[i];
 
-  //   const Node *p = svs[i];
+    if (param.kernel_type == PRECOMPUTED) {
+      model_file << "0:" << static_cast<int>(p->value) << ' ';
+    } else {
+      while (p->index != -1) {
+        model_file << p->index << ':' << std::setprecision(8) << p->value << ' ';
+        ++p;
+      }
+    }
+    model_file << '\n';
+  }
 
-  //   if (param.kernel_type == PRECOMPUTED) {
-  //     fprintf(fp,"0:%d ",(int)(p->value));
-  //   } else {
-  //     while (p->index != -1) {
-  //       fprintf(fp,"%d:%.8g ",p->index,p->value);
-  //       p++;
-  //     }
-  //   }
-  //   fprintf(fp, "\n");
-  // }
-
-  // if (ferror(fp) != 0 || fclose(fp) != 0) {
-  //   return -1;
-  // } else {
-  //   return 0;
-  // }
   return 0;
 }
 
-static char *line = NULL;
-static int max_line_len;
-
-static char *readline(FILE *input) {
-  int len;
-
-  if (fgets(line,max_line_len,input) == NULL)
-    return NULL;
-
-  while (strrchr(line,'\n') == NULL) {
-    max_line_len *= 2;
-    line = (char *) realloc(line,(size_t)max_line_len);
-    len = (int) strlen(line);
-    if (fgets(line+len,max_line_len-len,input) == NULL)
-      break;
-  }
-  return line;
-}
-
-//
-// FSCANF helps to handle fscanf failures.
-// Its do-while block avoids the ambiguity when
-// if (...)
-//    FSCANF();
-// is used
-//
-#define FSCANF(_stream, _format, _var) do{ if (fscanf(_stream, _format, _var) != 1) return false; }while(0)
-bool read_model_header(FILE *fp, SVMModel* model) {
-  SVMParameter &param = model->param;
-  char cmd[81];
-  while (1) {
-    FSCANF(fp,"%80s",cmd);
-    // change to switch
-    if (strcmp(cmd,"svm_type")==0) {
-      FSCANF(fp,"%80s",cmd);
-      int i;
-      for (i = 0; svm_type_table[i]; ++i) {
-        if (strcmp(svm_type_table[i],cmd) == 0) {
-          param.svm_type=i;
-          break;
-        }
-      }
-      if (svm_type_table[i] == NULL) {
-        fprintf(stderr,"unknown svm type.\n");
-        return false;
-      }
-    } else if (strcmp(cmd,"kernel_type") == 0) {
-      FSCANF(fp,"%80s",cmd);
-      int i;
-      for (i = 0; kernel_type_table[i]; ++i) {
-        if (strcmp(kernel_type_table[i],cmd) == 0) {
-          param.kernel_type=i;
-          break;
-        }
-      }
-      if (kernel_type_table[i] == NULL) {
-        fprintf(stderr,"unknown kernel function.\n");
-        return false;
-      }
-    }
-    else if(strcmp(cmd,"degree")==0)
-      FSCANF(fp,"%d",&param.degree);
-    else if(strcmp(cmd,"gamma")==0)
-      FSCANF(fp,"%lf",&param.gamma);
-    else if(strcmp(cmd,"coef0")==0)
-      FSCANF(fp,"%lf",&param.coef0);
-    else if(strcmp(cmd,"num_classes")==0)
-      FSCANF(fp,"%d",&model->num_classes);
-    else if(strcmp(cmd,"total_sv")==0)
-      FSCANF(fp,"%d",&model->total_sv);
-    else if(strcmp(cmd,"rho")==0)
-    {
-      int n = model->num_classes * (model->num_classes-1)/2;
-      model->rho = new double[n];
-      for (int i = 0; i < n; ++i)
-        FSCANF(fp,"%lf",&model->rho[i]);
-    }
-    else if(strcmp(cmd,"labels")==0)
-    {
-      int n = model->num_classes;
-      model->labels = new int[n];
-      for (int i = 0; i < n; ++i)
-        FSCANF(fp,"%d",&model->labels[i]);
-    }
-    else if(strcmp(cmd,"nr_sv")==0)
-    {
-      int n = model->num_classes;
-      model->num_svs = new int[n];
-      for (int i = 0; i < n; ++i)
-        FSCANF(fp,"%d",&model->num_svs[i]);
-    }
-    else if(strcmp(cmd,"svs")==0)
-    {
-      while (1) {
-        int c = getc(fp);
-        if (c==EOF || c=='\n') break;
-      }
-      break;
-    }
-    else
-    {
-      fprintf(stderr,"unknown text in model file: [%s]\n",cmd);
-      return false;
-    }
-  }
-
-  return true;
-
-}
-
-SVMModel *LoadSVMModel(const char *model_file_name) {
-  FILE *fp = fopen(model_file_name,"rb");
-  if (fp == NULL) return NULL;
-
-  // read parameters
+SVMModel *LoadSVMModel(std::ifstream &model_file) {
   SVMModel *model = new SVMModel;
+  InitSVMParam(&(model->param));
+  SVMParameter &param = model->param;
   model->rho = NULL;
   model->sv_indices = NULL;
   model->labels = NULL;
   model->num_svs = NULL;
 
-  // read header
-  if (!read_model_header(fp, model)) {
-    fprintf(stderr, "ERROR: fscanf failed to read model\n");
-    delete[] model->rho;
-    delete[] model->labels;
-    delete[] model->num_svs;
-    delete model;
-    return NULL;
-  }
+  char cmd[80];
+  while (1) {
+    model_file >> cmd;
 
-  // read sv_coef and SV
-  int elements = 0;
-  long pos = ftell(fp);
+    if (std::strcmp(cmd, "svm_type") == 0) {
+      model_file >> cmd;
+      int i;
+      for (i = 0; kSVMTypeTable[i]; ++i) {
+        if (std::strcmp(kSVMTypeTable[i], cmd) == 0) {
+          param.svm_type = i;
+          break;
+        }
+      }
+      if (kSVMTypeTable[i] == NULL) {
+        std::cerr << "Unknown SVM type.\n" << std::endl;
+        return NULL;
+      }
+    } else
+    if (std::strcmp(cmd, "kernel_type") == 0) {
+      model_file >> cmd;
+      int i;
+      for (i = 0; kKernelTypeTable[i]; ++i) {
+        if (std::strcmp(kKernelTypeTable[i], cmd) == 0) {
+          param.kernel_type = i;
+          break;
+        }
+      }
+      if (kKernelTypeTable[i] == NULL) {
+        std::cerr << "Unknown kernel function.\n" << std::endl;
+        return NULL;
+      }
+    } else
+    if (std::strcmp(cmd, "degree") == 0) {
+      model_file >> param.degree;
+    } else
+    if (std::strcmp(cmd, "gamma") == 0) {
+      model_file >> param.gamma;
+    } else
+    if (std::strcmp(cmd, "coef0") == 0) {
+      model_file >> param.coef0;
+    } else
+    if (std::strcmp(cmd, "num_examples") == 0) {
+      model_file >> model->num_ex;
+    } else
+    if (std::strcmp(cmd, "num_classes") == 0) {
+      model_file >> model->num_classes;
+    } else
+    if (std::strcmp(cmd, "total_SV") == 0) {
+      model_file >> model->total_sv;
+    } else
+    if (std::strcmp(cmd, "labels") == 0) {
+      int n = model->num_classes;
+      model->labels = new int[n];
+      for (int i = 0; i < n; ++i) {
+        model_file >> model->labels[i];
+      }
+    } else
+    if (std::strcmp(cmd, "rho") == 0) {
+      int n = model->num_classes*(model->num_classes-1)/2;
+      model->rho = new double[n];
+      for (int i = 0; i < n; ++i) {
+        model_file >> model->rho[i];
+      }
+    } else
+    if (std::strcmp(cmd, "num_SVs") == 0) {
+      int n = model->num_classes;
+      model->num_svs = new int[n];
+      for (int i = 0; i < n; ++i) {
+        model_file >> model->num_svs[i];
+      }
+    } else
+    if (std::strcmp(cmd, "SV_indices") == 0) {
+      int n = model->total_sv;
+      model->sv_indices = new int[n];
+      for (int i = 0; i < n; ++i) {
+        model_file >> model->sv_indices[i];
+      }
+    } else
+    if (std::strcmp(cmd, "SVs") == 0) {
+      std::size_t m = static_cast<unsigned long>(model->num_classes)-1;
+      int total_sv = model->total_sv;
+      std::string line;
 
-  max_line_len = 1024;
-  line = new char[max_line_len];
-  char *p,*endptr,*idx,*val;
+      if (model_file.peek() == '\n')
+        model_file.get();
 
-  while (readline(fp) != NULL) {
-    p = strtok(line,":");
-    while (1) {
-      p = strtok(NULL,":");
-      if (p == NULL)
-        break;
-      ++elements;
+      model->sv_coef = new double*[m];
+      for (int i = 0; i < m; ++i) {
+        model->sv_coef[i] = new double[total_sv];
+      }
+      model->svs = new Node*[total_sv];
+      for (int i = 0; i < total_sv; ++i) {
+        std::vector<std::string> tokens;
+        std::size_t prev = 0, pos;
+
+        std::getline(model_file, line);
+        while ((pos = line.find_first_of(" \t\n", prev)) != std::string::npos) {
+          if (pos > prev)
+            tokens.push_back(line.substr(prev, pos-prev));
+          prev = pos + 1;
+        }
+        if (prev < line.length())
+          tokens.push_back(line.substr(prev, std::string::npos));
+
+        for (std::size_t j = 0; j < m; ++j) {
+          try
+          {
+            std::size_t end;
+            model->sv_coef[j][i] = std::stod(tokens[j], &end);
+            if (end != tokens[j].length()) {
+              throw std::invalid_argument("incomplete convention");
+            }
+          }
+          catch(std::exception& e)
+          {
+            std::cerr << "Error: " << e.what() << " in SV " << (i+1) << std::endl;
+            delete[] model->svs;
+            for (int j = 0; j < m; ++j) {
+              delete[] model->sv_coef[j];
+            }
+            delete[] model->sv_coef;
+            std::vector<std::string>(tokens).swap(tokens);
+            exit(EXIT_FAILURE);
+          }  // TODO try not to use exception
+        }
+
+        std::size_t elements = tokens.size() - m + 1;
+        model->svs[i] = new Node[elements];
+        prev = 0;
+        for (std::size_t j = 0; j < elements-1; ++j) {
+          pos = tokens[j+m].find_first_of(':');
+          try
+          {
+            std::size_t end;
+
+            model->svs[i][j].index = std::stoi(tokens[j+m].substr(prev, pos-prev), &end);
+            if (end != (tokens[j+m].substr(prev, pos-prev)).length()) {
+              throw std::invalid_argument("incomplete convention");
+            }
+            model->svs[i][j].value = std::stod(tokens[j+m].substr(pos+1), &end);
+            if (end != (tokens[j+m].substr(pos+1)).length()) {
+              throw std::invalid_argument("incomplete convention");
+            }
+          }
+          catch(std::exception& e)
+          {
+            std::cerr << "Error: " << e.what() << " in line " << (i+1) << std::endl;
+            for (int k = 0; k < m; ++k) {
+              delete[] model->sv_coef[k];
+            }
+            delete[] model->sv_coef;
+            for (int k = 0; k < i+1; ++k) {
+              delete[] model->svs[k];
+            }
+            delete[] model->svs;
+            std::vector<std::string>(tokens).swap(tokens);
+            exit(EXIT_FAILURE);
+          }
+        }
+        model->svs[i][elements-1].index = -1;
+        model->svs[i][elements-1].value = 0;
+      }
+      break;
+    } else {
+      std::cerr << "Unknown text in knn_model file: " << cmd << std::endl;
+      FreeSVMModel(&model);
+      return NULL;
     }
   }
-  elements += model->total_sv;
-
-  fseek(fp,pos,SEEK_SET);
-
-  int m = model->num_classes - 1;
-  int total_sv = model->total_sv;
-  model->sv_coef = new double*[m];
-  int i;
-  for (i = 0; i < m; ++i)
-    model->sv_coef[i] = new double[total_sv];
-  model->svs = new Node*[total_sv];
-  Node *x_space = NULL;
-  if (total_sv > 0)
-    x_space = new Node[elements];
-
-  int j=0;
-  for (i = 0; i < total_sv; ++i) {
-    readline(fp);
-    model->svs[i] = &x_space[j];
-
-    p = strtok(line, " \t");
-    model->sv_coef[0][i] = strtod(p,&endptr);
-    for (int k = 1; k < m; ++k) {
-      p = strtok(NULL, " \t");
-      model->sv_coef[k][i] = strtod(p,&endptr);
-    }
-
-    while (1) {
-      idx = strtok(NULL, ":");
-      val = strtok(NULL, " \t");
-
-      if (val == NULL) break;
-      x_space[j].index = (int) strtol(idx,&endptr,10);
-      x_space[j].value = strtod(val,&endptr);
-
-      ++j;
-    }
-    x_space[j++].index = -1;
-  }
-  delete[] line;
-
-  if (ferror(fp) != 0 || fclose(fp) != 0)
-    return NULL;
-
-  model->free_sv = 1;  // XXX
+  model->free_sv = 1;
   return model;
 }
 

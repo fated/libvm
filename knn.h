@@ -31,7 +31,9 @@ int CompareDist(double *neighbors, double dist, int num_neighbors);
 
 int SaveKNNModel(std::ofstream &model_file, const struct KNNModel *model);
 struct KNNModel *LoadKNNModel(std::ifstream &model_file);
+void FreeKNNModel(struct KNNModel *model);
 
+void FreeKNNParam(struct KNNParameter *param);
 void InitKNNParam(struct KNNParameter *param);
 
 #endif  // LIBVM_KNN_H_

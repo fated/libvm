@@ -24,6 +24,7 @@ struct SVMParameter {
 
 struct SVMModel {
   struct SVMParameter param;
+  int num_ex;
   int num_classes;  // number of classes (k)
   int total_sv;  // total #SV
   struct Node **svs;  // SVs (SV[total_sv])
@@ -40,7 +41,7 @@ struct SVMModel {
 struct SVMModel *TrainSVM(const struct Problem *prob, const struct SVMParameter *param);
 
 int SaveSVMModel(std::ofstream &model_file, const struct SVMModel *model);
-struct SVMModel *LoadSVMModel(const char *model_file_name);
+struct SVMModel *LoadSVMModel(std::ifstream &model_file);
 
 double PredictValues(const struct SVMModel *model, const struct Node *x, double* decision_values);
 double PredictSVM(const struct SVMModel *model, const struct Node *x);

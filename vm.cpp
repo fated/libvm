@@ -36,7 +36,7 @@ int GetCategory(double combined_decision_values, int num_categories) {
   return category;
 }
 
-struct Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
+Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
   Model *model = new Model;
   model->param = *param;
   int num_ex = train->num_ex;
@@ -52,9 +52,7 @@ struct Model *TrainVM(const struct Problem *train, const struct Parameter *param
       int this_label = static_cast<int>(train->y[i]);
       std::size_t j;
       for (j = 0; j < num_classes; ++j) {
-        if (this_label == unique_labels[j]) {
-          break;
-        }
+        if (this_label == unique_labels[j]) break;
       }
       alter_labels[i] = static_cast<int>(j);
       if (j == num_classes) {
@@ -68,8 +66,9 @@ struct Model *TrainVM(const struct Problem *train, const struct Parameter *param
     }
     std::vector<int>(unique_labels).swap(unique_labels);
 
-    if (num_classes == 1)
+    if (num_classes == 1) {
       std::cerr << "WARNING: training set only has one class. See README for details." << std::endl;
+    }
 
     int *categories = new int[num_ex];
     double **dist_neighbors = new double*[num_ex];
@@ -89,7 +88,6 @@ struct Model *TrainVM(const struct Problem *train, const struct Parameter *param
       for (int j = i+1; j < num_ex; ++j) {
         double dist = CalcDist(train->x[i], train->x[j]);
         int index;
-
         index = CompareDist(dist_neighbors[i], dist, num_neighbors);
         if (index < num_neighbors) {
           InsertLabel(label_neighbors[i], alter_labels[j], num_neighbors, index);
@@ -109,6 +107,7 @@ struct Model *TrainVM(const struct Problem *train, const struct Parameter *param
     struct KNNModel *knn_model = new KNNModel;
     model->num_classes = num_classes;
     model->num_ex = num_ex;
+    model->num_categories = num_classes;
     knn_model->num_ex = num_ex;
     knn_model->num_classes = num_classes;
     knn_model->labels = labels;
@@ -176,6 +175,7 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
   double predict_label;
   int **f_matrix = new int*[num_classes];
   int *alter_labels = new int[num_ex];
+
   for (int i = 0; i < num_classes; ++i) {
     for (int j = 0; j < num_ex; ++j) {
       if (labels[i] == train->y[j]) {
@@ -211,7 +211,6 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
       for (int j = 0; j < num_ex; ++j) {
         double dist = CalcDist(train->x[j], x);
         int index;
-
         index = CompareDist(dist_neighbors[j], dist, num_neighbors);
         if (index < num_neighbors) {
           InsertLabel(label_neighbors[j], i, num_neighbors, index);
@@ -286,10 +285,12 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
   for (int i = 0; i < num_classes; ++i) {
     matrix[i] = new double[num_classes];
     int sum = 0;
-    for (int j = 0; j < num_classes; ++j)
+    for (int j = 0; j < num_classes; ++j) {
       sum += f_matrix[i][j];
-    for (int j = 0; j < num_classes; ++j)
+    }
+    for (int j = 0; j < num_classes; ++j) {
       matrix[i][j] = static_cast<double>(f_matrix[i][j]) / sum;
+    }
   }
 
   double *quality = new double[num_classes];
@@ -480,9 +481,7 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
       this_label = static_cast<int>(prob->y[indices[i]]);
       std::size_t j;
       for (j = 0; j < num_classes; ++j) {
-        if (this_label == labels[j]) {
-          break;
-        }
+        if (this_label == labels[j]) break;
       }
       alter_labels[i] = static_cast<int>(j);
       if (j == num_classes) {
@@ -575,6 +574,7 @@ int SaveModel(const char *model_file_name, const struct Model *model) {
   }
 
   model_file.close();
+
   return 0;
 }
 
@@ -607,6 +607,9 @@ Model *LoadModel(const char *model_file_name) {
       }
       if (kTaxonomyTypeTable[i] == NULL) {
         std::cerr << "Unknown taxonomy type.\n" << std::endl;
+        FreeModel(model);
+        delete model;
+        model_file.close();
         return NULL;
       }
     } else
@@ -625,6 +628,9 @@ Model *LoadModel(const char *model_file_name) {
     if (std::strcmp(cmd, "knn_model") == 0) {
       model->knn_model = LoadKNNModel(model_file);
       if (model->knn_model == NULL) {
+        FreeModel(model);
+        delete model;
+        model_file.close();
         return NULL;
       }
       model->num_ex = model->knn_model->num_ex;
@@ -635,6 +641,9 @@ Model *LoadModel(const char *model_file_name) {
     if (std::strcmp(cmd, "svm_model") == 0) {
       model->svm_model = LoadSVMModel(model_file);
       if (model->svm_model == NULL) {
+        FreeModel(model);
+        delete model;
+        model_file.close();
         return NULL;
       }
       model->num_ex = model->svm_model->num_ex;
@@ -644,11 +653,13 @@ Model *LoadModel(const char *model_file_name) {
     } else {
       std::cerr << "Unknown text in model file: " << cmd << std::endl;
       FreeModel(model);
+      delete model;
       model_file.close();
       return NULL;
     }
   }
   model_file.close();
+
   return model;
 }
 
@@ -704,12 +715,15 @@ void FreeParam(struct Parameter *param) {
 }
 
 const char *CheckParameter(const struct Parameter *param) {
-  if (param->knn_param->num_neighbors < 1) {
-    return "num_neighbors should be greater than 0";
-  }
-
   if (param->save_model == 1 && param->load_model == 1) {
     return "cannot save and load model at the same time";
+  }
+
+  if (param->taxonomy_type == KNN) {
+    if (param->knn_param == NULL) {
+      return "no knn parameter";
+    }
+    return CheckKNNParameter(param->knn_param);
   }
 
   if (param->taxonomy_type == SVM_EL ||

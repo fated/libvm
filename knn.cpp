@@ -200,3 +200,11 @@ void InitKNNParam(struct KNNParameter *param) {
 
   return;
 }
+
+const char *CheckKNNParameter(const struct KNNParameter *param) {
+  if (param->num_neighbors < 1) {
+    return "num_neighbors should be greater than 0";
+  }
+
+  return NULL;
+}

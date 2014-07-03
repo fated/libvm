@@ -38,20 +38,18 @@ struct SVMModel {
                 // 0 if SVMModel is created by TrainSVM
 };
 
-struct SVMModel *TrainSVM(const struct Problem *prob, const struct SVMParameter *param);
-
-int SaveSVMModel(std::ofstream &model_file, const struct SVMModel *model);
-struct SVMModel *LoadSVMModel(std::ifstream &model_file);
-
+SVMModel *TrainSVM(const struct Problem *prob, const struct SVMParameter *param);
 double PredictValues(const struct SVMModel *model, const struct Node *x, double* decision_values);
 double PredictSVM(const struct SVMModel *model, const struct Node *x);
 double PredictDecisionValues(const struct SVMModel *model, const struct Node *x, double **decision_values);
 
+int SaveSVMModel(std::ofstream &model_file, const struct SVMModel *model);
+SVMModel *LoadSVMModel(std::ifstream &model_file);
 void FreeSVMModel(struct SVMModel **model);
-void FreeSVMParam(struct SVMParameter *param);
 
-const char *CheckSVMParameter(const struct SVMParameter *param);
+void FreeSVMParam(struct SVMParameter *param);
 void InitSVMParam(struct SVMParameter *param);
+const char *CheckSVMParameter(const struct SVMParameter *param);
 
 void SetPrintNull();
 void SetPrintCout();

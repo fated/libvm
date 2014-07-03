@@ -11,7 +11,7 @@
 typedef float Qfloat;
 typedef signed char schar;
 
-static void PrintStringCout(const char *s) {
+static void PrintCout(const char *s) {
   std::cout << s;
   std::cout.flush();
 }
@@ -196,8 +196,7 @@ class Kernel : public QMatrix {
   double kernel_sigmoid(int i, int j) const {
     return tanh(gamma*dot(x[i], x[j])+coef0);
   }
-  double kernel_precomputed(int i, int j) const
-  {
+  double kernel_precomputed(int i, int j) const {
     return x[i][(int)(x[j][0].value)].value;
   }
 };
@@ -357,7 +356,7 @@ class Solver {
  protected:
   int active_size;
   schar *y;
-  double *G;    // gradient of objective function
+  double *G;  // gradient of objective function
   enum { LOWER_BOUND, UPPER_BOUND, FREE };
   char *alpha_status;  // LOWER_BOUND, UPPER_BOUND, FREE
   double *alpha;
@@ -367,7 +366,7 @@ class Solver {
   double Cp,Cn;
   double *p;
   int *active_set;
-  double *G_bar;    // gradient, if we treat free variables as 0
+  double *G_bar;  // gradient, if we treat free variables as 0
   int l;
   bool unshrink;  // XXX
 
@@ -411,43 +410,50 @@ void Solver::swap_index(int i, int j) {
 
 void Solver::reconstruct_gradient() {
   // reconstruct inactive elements of G from G_bar and free variables
-
   if (active_size == l) return;
 
   int i, j;
   int nr_free = 0;
 
-  for (j = active_size; j < l; ++j)
+  for (j = active_size; j < l; ++j) {
     G[j] = G_bar[j] + p[j];
+  }
 
-  for (j = 0; j < active_size; ++j)
-    if (is_free(j))
+  for (j = 0; j < active_size; ++j) {
+    if (is_free(j)) {
       nr_free++;
+    }
+  }
 
-  if (2*nr_free < active_size)
+  if (2*nr_free < active_size) {
     info("\nWARNING: using -h 0 may be faster\n");
+  }
 
   if (nr_free*l > 2*active_size*(l-active_size)) {
     for (i = active_size; i < l; ++i) {
       const Qfloat *Q_i = Q->get_Q(i, active_size);
-      for (j = 0; j < active_size; ++j)
-        if (is_free(j))
+      for (j = 0; j < active_size; ++j) {
+        if (is_free(j)) {
           G[i] += alpha[j] * Q_i[j];
+        }
+      }
     }
   } else {
-    for (i = 0; i < active_size; ++i)
+    for (i = 0; i < active_size; ++i) {
       if (is_free(i)) {
         const Qfloat *Q_i = Q->get_Q(i, l);
         double alpha_i = alpha[i];
-        for (j = active_size; j < l; ++j)
+        for (j = active_size; j < l; ++j) {
           G[j] += alpha_i * Q_i[j];
+        }
       }
+    }
   }
 }
 
 void Solver::Solve(int l, const QMatrix &Q, const double *p_, const schar *y_,
-       double *alpha_, double Cp, double Cn, double eps,
-       SolutionInfo *si, int shrinking) {
+    double *alpha_, double Cp, double Cn, double eps,
+    SolutionInfo *si, int shrinking) {
   this->l = l;
   this->Q = &Q;
   QD=Q.get_QD();
@@ -461,13 +467,15 @@ void Solver::Solve(int l, const QMatrix &Q, const double *p_, const schar *y_,
 
   // initialize alpha_status
   alpha_status = new char[l];
-  for (int i = 0; i < l; ++i)
+  for (int i = 0; i < l; ++i) {
     update_alpha_status(i);
+  }
 
   // initialize active set (for shrinking)
   active_set = new int[l];
-  for (int i = 0; i < l; ++i)
+  for (int i = 0; i < l; ++i) {
     active_set[i] = i;
+  }
   active_size = l;
 
   // initialize gradient
@@ -482,11 +490,14 @@ void Solver::Solve(int l, const QMatrix &Q, const double *p_, const schar *y_,
       const Qfloat *Q_i = Q.get_Q(i,l);
       double alpha_i = alpha[i];
       int j;
-      for (j = 0; j < l; ++j)
+      for (j = 0; j < l; ++j) {
         G[j] += alpha_i*Q_i[j];
-      if (is_upper_bound(i))
-        for (j = 0; j < l; ++j)
+      }
+      if (is_upper_bound(i)) {
+        for (j = 0; j < l; ++j) {
           G_bar[j] += get_C(i) * Q_i[j];
+        }
+      }
     }
 
   // optimization step
@@ -1669,7 +1680,6 @@ int SaveSVMModel(std::ofstream &model_file, const struct SVMModel *model) {
 
 SVMModel *LoadSVMModel(std::ifstream &model_file) {
   SVMModel *model = new SVMModel;
-  InitSVMParam(&(model->param));
   SVMParameter &param = model->param;
   model->rho = NULL;
   model->sv_indices = NULL;
@@ -1982,5 +1992,5 @@ void SetPrintNull() {
 }
 
 void SetPrintCout() {
-  PrintString = &PrintStringCout;
+  PrintString = &PrintCout;
 }

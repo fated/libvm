@@ -47,9 +47,11 @@ static inline void clone(T *&dest, S *src, int size) {
   if (sizeof(T) < sizeof(S))
     std::cerr << "WARNING: destination type is smaller than source type, data will be truncated." << std::endl;
   std::copy(src, src+size, dest);
+
+  return;
 }
 
-struct Problem *ReadProblem(const char *file_name);
+Problem *ReadProblem(const char *file_name);
 void FreeProblem(struct Problem *problem);
 
 #endif  // LIBVM_UTILITIES_H_

@@ -27,16 +27,15 @@ struct Model {
   int *categories;
 };
 
-struct Model *TrainVM(const struct Problem *train, const struct Parameter *param);
+Model *TrainVM(const struct Problem *train, const struct Parameter *param);
 double PredictVM(const struct Problem *train, const struct Model *model, const struct Node *x, double &lower, double &upper);
 void OnlinePredict(const struct Problem *prob, const struct Parameter *param, double *predict_labels, int *indices, double *lower_bounds, double *upper_bounds);
 
 int SaveModel(const char *model_file_name, const struct Model *model);
-struct Model *LoadModel(const char *model_file_name);
-
+Model *LoadModel(const char *model_file_name);
 void FreeModel(struct Model *model);
-void FreeParam(struct Parameter *param);
 
+void FreeParam(struct Parameter *param);
 const char *CheckParameter(const struct Parameter *param);
 
 #endif  // LIBVM_VM_H_

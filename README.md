@@ -2,18 +2,18 @@
 
 LibVM is a simple, easy-to-use, and efficient software for Venn Machine on classification, which gives prediction together with probabilistic estimations. It solves Venn prediction in both online and offline mode with _k_-nearest neighbors or support vector machines as the underlying algorithms. This document explains the use of LibVM.
 
-## [Table of Contents](#toc)
+## Table of Contents
 
-* [Installation and Data Format](#installation)
-* ["vm-offline" Usage](#vm-offline)
-* ["vm-online" Usage](#vm-online)
-* [Tips on Practical Use](#tips)
+* [Installation and Data Format](#installation-and-data-format)
+* ["vm-offline" Usage](#vm-offline-usage)
+* ["vm-online" Usage](#vm-online-usage)
+* [Tips on Practical Use](#tips-on-practical-use)
 * [Examples](#examples)
-* [Library Usage](#library)
-* [Additional Information](#additional)
-* [Special Thanks](#thanks)
+* [Library Usage](#library-usage)
+* [Additional Information](#additional-information)
+* [Special Thanks](#special-thanks)
 
-## [Installation and Data Format](#installation)
+## Installation and Data Format
 
 On Unix systems, type `make` to build the `vm-offline` and `vm-online` programs. Run them without arguments to show the usages of them.
 
@@ -31,7 +31,7 @@ A sample classification data set included in this package is `iris_scale` for tr
 
 Type `vm-offline iris_scale iris_scale_t`, and the program will read the training data and testing data and then output the result into `iris_scale_t_output` file by default. The model file `iris_scale_model` will not be saved by default, however, adding `-s model_file_name` to `[option]` will save the model to the file. The output file contains the predicted class labels and the lower and upper bounds of probabilities for the predicted label.
 
-## ["vm-offline" Usage](#vm-offline)
+## "vm-offline" Usage
 ```
 Usage: vm-offline [options] train_file test_file [output_file]
 options:
@@ -63,7 +63,7 @@ options:
     -pq : quiet mode (no outputs)
 ```
 
-## ["vm-online" Usage](#vm-online)
+## "vm-online" Usage
 ```
 Usage: vm-online [options] data_file [output_file]
 options:
@@ -93,10 +93,10 @@ options:
     -pq : quiet mode (no outputs)
 ```
 
-## [Tips on Practical Use](#tips)
+## Tips on Practical Use
 * Scale your data. For example, scale each attribute to [0,1] or [-1,+1].
 
-## [Examples](#examples)
+## Examples
 ```
 > vm-offline -k 3 train_file test_file output_file
 ```
@@ -115,10 +115,10 @@ Train a venn predictor with support vector machines as underlying algorithm from
 
 Train an online venn predictor classifier with support vector machine as underlying algorithm.
 
-## [Library Usage](#library)
+## Library Usage
 
-## [Additional Information](#additional)
+## Additional Information
 For any questions and comments, please email c.zhou@cs.rhul.ac.uk
 
-## [Special Thanks](#thanks)
+## Special Thanks
 Special thanks to Chih-Jen Lin (LibSVM).

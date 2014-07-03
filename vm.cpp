@@ -42,79 +42,25 @@ Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
   int num_ex = train->num_ex;
 
   if (param->taxonomy_type == KNN) {
-    int num_classes = 0;
     int num_neighbors = param->knn_param->num_neighbors;
-    int *labels = NULL;
-    int *alter_labels = new int[num_ex];
-
-    std::vector<int> unique_labels;
-    for (int i = 0; i < num_ex; ++i) {
-      int this_label = static_cast<int>(train->y[i]);
-      std::size_t j;
-      for (j = 0; j < num_classes; ++j) {
-        if (this_label == unique_labels[j]) break;
-      }
-      alter_labels[i] = static_cast<int>(j);
-      if (j == num_classes) {
-        unique_labels.push_back(this_label);
-        ++num_classes;
-      }
-    }
-    labels = new int[num_classes];
-    for (std::size_t i = 0; i < unique_labels.size(); ++i) {
-      labels[i] = unique_labels[i];
-    }
-    std::vector<int>(unique_labels).swap(unique_labels);
-
-    if (num_classes == 1) {
-      std::cerr << "WARNING: training set only has one class. See README for details." << std::endl;
-    }
 
     int *categories = new int[num_ex];
-    double **dist_neighbors = new double*[num_ex];
-    int **label_neighbors = new int*[num_ex];
-
     for (int i = 0; i < num_ex; ++i) {
-      dist_neighbors[i] = new double[num_neighbors];
-      label_neighbors[i] = new int[num_neighbors];
-      for (int j = 0; j < num_neighbors; ++j) {
-        dist_neighbors[i][j] = INF;
-        label_neighbors[i][j] = -1;
-      }
       categories[i] = -1;
     }
 
-    for (int i = 0; i < num_ex-1; ++i) {
-      for (int j = i+1; j < num_ex; ++j) {
-        double dist = CalcDist(train->x[i], train->x[j]);
-        int index;
-        index = CompareDist(dist_neighbors[i], dist, num_neighbors);
-        if (index < num_neighbors) {
-          InsertLabel(label_neighbors[i], alter_labels[j], num_neighbors, index);
-        }
-        index = CompareDist(dist_neighbors[j], dist, num_neighbors);
-        if (index < num_neighbors) {
-          InsertLabel(label_neighbors[j], alter_labels[i], num_neighbors, index);
-        }
-      }
-    }
+    model->knn_model = TrainKNN(train, param->knn_param);
+
+    int num_categories = model->knn_model->num_classes;
+    int num_classes = model->knn_model->num_classes;
 
     for (int i = 0; i < num_ex; ++i) {
-      categories[i] = FindMostFrequent(label_neighbors[i], num_neighbors);
+      categories[i] = FindMostFrequent(model->knn_model->label_neighbors[i], num_neighbors);
     }
-    delete[] alter_labels;
 
-    struct KNNModel *knn_model = new KNNModel;
     model->num_classes = num_classes;
     model->num_ex = num_ex;
-    model->num_categories = num_classes;
-    knn_model->num_ex = num_ex;
-    knn_model->num_classes = num_classes;
-    knn_model->labels = labels;
-    knn_model->dist_neighbors = dist_neighbors;
-    knn_model->label_neighbors = label_neighbors;
-    knn_model->param = *param->knn_param;
-    model->knn_model = knn_model;
+    model->num_categories = num_categories;
     model->categories = categories;
     clone(model->labels, model->knn_model->labels, num_classes);
   }

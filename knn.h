@@ -25,6 +25,7 @@ static inline void InsertLabel(T *labels, T label, int num_neighbors, int index)
   return;
 }
 
+KNNModel *TrainKNN(const struct Problem *prob, const struct KNNParameter *param);
 double PredictKNN(struct Problem *train, struct Node *x, const int num_neighbors);
 double CalcDist(const struct Node *x1, const struct Node *x2);
 int CompareDist(double *neighbors, double dist, int num_neighbors);

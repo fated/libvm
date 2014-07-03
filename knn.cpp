@@ -53,6 +53,80 @@ int CompareDist(double *neighbors, double dist, int num_neighbors) {
   return i;
 }
 
+KNNModel *TrainKNN(const struct Problem *prob, const struct KNNParameter *param) {
+  KNNModel *model = new KNNModel;
+  model->param = *param;
+  model->labels = NULL;
+  model->dist_neighbors = NULL;
+  model->label_neighbors = NULL;
+
+  int num_classes = 0;
+  int num_ex = prob->num_ex;
+  int num_neighbors = param->num_neighbors;
+  int *labels = NULL;
+  int *alter_labels = new int[num_ex];
+
+  std::vector<int> unique_labels;
+  for (int i = 0; i < num_ex; ++i) {
+    int this_label = static_cast<int>(prob->y[i]);
+    std::size_t j;
+    for (j = 0; j < num_classes; ++j) {
+      if (this_label == unique_labels[j]) break;
+    }
+    alter_labels[i] = static_cast<int>(j);
+    if (j == num_classes) {
+      unique_labels.push_back(this_label);
+      ++num_classes;
+    }
+  }
+  labels = new int[num_classes];
+  for (std::size_t i = 0; i < unique_labels.size(); ++i) {
+    labels[i] = unique_labels[i];
+  }
+  std::vector<int>(unique_labels).swap(unique_labels);
+
+  if (num_classes == 1) {
+    std::cerr << "WARNING: training set only has one class. See README for details." << std::endl;
+  }
+
+  double **dist_neighbors = new double*[num_ex];
+  int **label_neighbors = new int*[num_ex];
+
+  for (int i = 0; i < num_ex; ++i) {
+    dist_neighbors[i] = new double[num_neighbors];
+    label_neighbors[i] = new int[num_neighbors];
+    for (int j = 0; j < num_neighbors; ++j) {
+      dist_neighbors[i][j] = INF;
+      label_neighbors[i][j] = -1;
+    }
+  }
+
+  for (int i = 0; i < num_ex-1; ++i) {
+    for (int j = i+1; j < num_ex; ++j) {
+      double dist = CalcDist(prob->x[i], prob->x[j]);
+      int index;
+      index = CompareDist(dist_neighbors[i], dist, num_neighbors);
+      if (index < num_neighbors) {
+        InsertLabel(label_neighbors[i], alter_labels[j], num_neighbors, index);
+      }
+      index = CompareDist(dist_neighbors[j], dist, num_neighbors);
+      if (index < num_neighbors) {
+        InsertLabel(label_neighbors[j], alter_labels[i], num_neighbors, index);
+      }
+    }
+  }
+  delete[] alter_labels;
+
+  model->num_ex = num_ex;
+  model->num_classes = num_classes;
+  model->labels = labels;
+  model->dist_neighbors = dist_neighbors;
+  model->label_neighbors = label_neighbors;
+  model->param = *param;
+
+  return model;
+}
+
 double PredictKNN(struct Problem *train, struct Node *x, const int num_neighbors) {
   double neighbors[num_neighbors];
   double labels[num_neighbors];

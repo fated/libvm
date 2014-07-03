@@ -129,6 +129,7 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
   param.taxonomy_type = KNN;
   param.save_model = 0;
   param.load_model = 0;
+  param.num_categories = 1;
   param.knn_param = new KNNParameter;
   param.svm_param = NULL;
   InitKNNParam(param.knn_param);

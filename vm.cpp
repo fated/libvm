@@ -285,7 +285,7 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
 void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
     double *predict_labels, int *indices,
     double *lower_bounds, double *upper_bounds,
-    double *brier) {
+    double *brier, double *logloss) {
   int num_ex = prob->num_ex;
   int num_classes = 0;
 
@@ -427,6 +427,8 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
       for (int j = 0; j < num_classes; ++j) {
         if (labels[static_cast<std::size_t>(j)] == prob->y[indices[i]]) {
           brier[i] += (1-avg_prob[j])*(1-avg_prob[j]);
+          double tmp = std::fmax(std::fmin(avg_prob[j], 1-kEpsilon), kEpsilon);
+          logloss[i] = - std::log(tmp);
         } else {
           brier[i] += avg_prob[j]*avg_prob[j];
         }
@@ -498,6 +500,8 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
       for (int j = 0; j < submodel->num_classes; ++j) {
         if (submodel->labels[j] == subprob.y[i]) {
           brier[i] += (1-avg_prob[j])*(1-avg_prob[j]);
+          double tmp = std::fmax(std::fmin(avg_prob[j], 1-kEpsilon), kEpsilon);
+          logloss[i] = - std::log(tmp);
         } else {
           brier[i] += avg_prob[j]*avg_prob[j];
         }

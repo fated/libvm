@@ -2,6 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <iomanip>
+#include <cmath>
 
 void ExitWithHelp();
 void ParseCommandLine(int argc, char *argv[], char *train_file_name, char *test_file_name, char *output_file_name, char *model_file_name);
@@ -16,7 +17,7 @@ int main(int argc, char *argv[]) {
   struct Problem *train, *test;
   struct Model *model;
   int num_correct = 0;
-  double avg_lower_bound = 0, avg_upper_bound = 0, avg_brier = 0;
+  double avg_lower_bound = 0, avg_upper_bound = 0, avg_brier = 0, avg_logloss = 0;
   const char *error_message;
 
   ParseCommandLine(argc, argv, train_file_name, test_file_name, output_file_name, model_file_name);
@@ -60,13 +61,15 @@ int main(int argc, char *argv[]) {
   }
 
   for (int i = 0; i < test->num_ex; ++i) {
-    double predict_label, lower_bound, upper_bound, brier = 0, *avg_prob = NULL;
+    double predict_label, lower_bound, upper_bound, logloss, brier = 0, *avg_prob = NULL;
 
     predict_label = PredictVM(train, model, test->x[i], lower_bound, upper_bound, &avg_prob);
 
     for (int j = 0; j < model->num_classes; ++j) {
       if (model->labels[j] == test->y[i]) {
         brier += (1-avg_prob[j])*(1-avg_prob[j]);
+        double tmp = std::fmax(std::fmin(avg_prob[j], 1-kEpsilon), kEpsilon);
+        logloss = - std::log(tmp);
       } else {
         brier += avg_prob[j]*avg_prob[j];
       }
@@ -76,6 +79,7 @@ int main(int argc, char *argv[]) {
     avg_lower_bound += lower_bound;
     avg_upper_bound += upper_bound;
     avg_brier += brier;
+    avg_logloss += logloss;
 
     output_file << predict_label << ' ' << lower_bound << ' ' << upper_bound << '\n';
     if (predict_label == test->y[i]) {
@@ -85,6 +89,7 @@ int main(int argc, char *argv[]) {
   avg_lower_bound /= test->num_ex;
   avg_upper_bound /= test->num_ex;
   avg_brier /= test->num_ex;
+  avg_logloss /= test->num_ex;
 
   std::chrono::time_point<std::chrono::steady_clock> end_time = std::chrono::high_resolution_clock::now();
 
@@ -92,7 +97,8 @@ int main(int argc, char *argv[]) {
             << " (" << num_correct << '/' << test->num_ex << ") "
             << "Probabilities: [" << std::fixed << std::setprecision(4) << 100*avg_lower_bound << "%, "
             << 100*avg_upper_bound << "%] "
-            << "Brier Score: " << avg_brier << '\n';
+            << "Brier Score: " << avg_brier << ' '
+            << "Logarithmic Loss: " << avg_logloss << '\n';
   output_file.close();
 
   std::cout << "Time cost: " << std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count()/1000.0 << " s\n";

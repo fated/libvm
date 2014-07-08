@@ -14,8 +14,8 @@ int main(int argc, char *argv[]) {
   struct Problem *prob;
   int num_correct = 0;
   int *indices = NULL;
-  double avg_lower_bound = 0, avg_upper_bound = 0;
-  double *predict_labels = NULL, *lower_bounds = NULL, *upper_bounds = NULL;
+  double avg_lower_bound = 0, avg_upper_bound = 0, avg_brier = 0, avg_logloss = 0;
+  double *predict_labels = NULL, *lower_bounds = NULL, *upper_bounds = NULL, *brier = NULL, *logloss = NULL;
   const char *error_message;
 
   ParseCommandLine(argc, argv, data_file_name, output_file_name);
@@ -43,11 +43,13 @@ int main(int argc, char *argv[]) {
   predict_labels = new double[prob->num_ex];
   lower_bounds = new double[prob->num_ex];
   upper_bounds = new double[prob->num_ex];
+  brier = new double[prob->num_ex];
+  logloss = new double[prob->num_ex];
   indices = new int[prob->num_ex];
 
   std::chrono::time_point<std::chrono::steady_clock> start_time = std::chrono::high_resolution_clock::now();
 
-  OnlinePredict(prob, &param, predict_labels, indices, lower_bounds, upper_bounds);
+  OnlinePredict(prob, &param, predict_labels, indices, lower_bounds, upper_bounds, brier, logloss);
 
   std::chrono::time_point<std::chrono::steady_clock> end_time = std::chrono::high_resolution_clock::now();
 
@@ -56,6 +58,8 @@ int main(int argc, char *argv[]) {
   for (int i = 1; i < prob->num_ex; ++i) {
     avg_lower_bound += lower_bounds[i];
     avg_upper_bound += upper_bounds[i];
+    avg_brier += brier[i];
+    avg_logloss += logloss[i];
 
     output_file << prob->y[indices[i]] << ' ' << predict_labels[i] << ' ' << lower_bounds[i] << ' ' << upper_bounds[i] << '\n';
     if (predict_labels[i] == prob->y[indices[i]]) {
@@ -64,11 +68,15 @@ int main(int argc, char *argv[]) {
   }
   avg_lower_bound /= prob->num_ex - 1;
   avg_upper_bound /= prob->num_ex - 1;
+  avg_brier /= prob->num_ex - 1;
+  avg_logloss /= prob->num_ex - 1;
 
   std::cout << "Accuracy: " << 100.0*num_correct/(prob->num_ex-1) << '%'
             << " (" << num_correct << '/' << prob->num_ex-1 << ") "
             << "Probabilities: [" << std::fixed << std::setprecision(4) << 100*avg_lower_bound << "%, "
-            << 100*avg_upper_bound << "%]\n";
+            << 100*avg_upper_bound << "%] "
+            << "Brier Score: " << avg_brier << ' '
+            << "Logarithmic Loss: " << avg_logloss << '\n';
   output_file.close();
 
   std::cout << "Time cost: " << std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count()/1000.0 << " s\n";
@@ -78,6 +86,7 @@ int main(int argc, char *argv[]) {
   delete[] predict_labels;
   delete[] lower_bounds;
   delete[] upper_bounds;
+  delete[] brier;
   delete[] indices;
 
   return 0;

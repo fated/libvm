@@ -28,8 +28,8 @@ struct Model {
 };
 
 Model *TrainVM(const struct Problem *train, const struct Parameter *param);
-double PredictVM(const struct Problem *train, const struct Model *model, const struct Node *x, double &lower, double &upper);
-void OnlinePredict(const struct Problem *prob, const struct Parameter *param, double *predict_labels, int *indices, double *lower_bounds, double *upper_bounds);
+double PredictVM(const struct Problem *train, const struct Model *model, const struct Node *x, double &lower, double &upper, double **avg_prob);
+void OnlinePredict(const struct Problem *prob, const struct Parameter *param, double *predict_labels, int *indices, double *lower_bounds, double *upper_bounds, double *brier);
 
 int SaveModel(const char *model_file_name, const struct Model *model);
 Model *LoadModel(const char *model_file_name);

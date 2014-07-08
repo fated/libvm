@@ -112,7 +112,7 @@ Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
   return model;
 }
 
-double PredictVM(const struct Problem *train, const struct Model *model, const struct Node *x, double &lower, double &upper) {
+double PredictVM(const struct Problem *train, const struct Model *model, const struct Node *x, double &lower, double &upper, double **avg_prob) {
   const Parameter& param = model->param;
   int num_ex = model->num_ex;
   int num_classes = model->num_classes;
@@ -240,13 +240,17 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
   }
 
   double *quality = new double[num_classes];
+  *avg_prob = new double[num_classes];
   for (int j = 0; j < num_classes; ++j) {
     quality[j] = matrix[0][j];
+    (*avg_prob)[j] = matrix[0][j];
     for (int i = 1; i < num_classes; ++i) {
       if (matrix[i][j] < quality[j]) {
         quality[j] = matrix[i][j];
       }
+      (*avg_prob)[j] += matrix[i][j];
     }
+    (*avg_prob)[j] /= num_classes;
   }
 
   int best = 0;
@@ -280,7 +284,8 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
 
 void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
     double *predict_labels, int *indices,
-    double *lower_bounds, double *upper_bounds) {
+    double *lower_bounds, double *upper_bounds,
+    double *brier) {
   int num_ex = prob->num_ex;
   int num_classes = 0;
 
@@ -390,13 +395,17 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
       }
 
       double *quality = new double[num_classes];
+      double *avg_prob = new double[num_classes];
       for (int j = 0; j < num_classes; ++j) {
         quality[j] = matrix[0][j];
+        avg_prob[j] = matrix[0][j];
         for (int k = 1; k < num_classes; ++k) {
           if (matrix[k][j] < quality[j]) {
             quality[j] = matrix[k][j];
           }
+          avg_prob[j] += matrix[k][j];
         }
+        avg_prob[j] /= num_classes;
       }
 
       int best = 0;
@@ -413,6 +422,16 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
           upper_bounds[i] = matrix[j][best];
         }
       }
+
+      brier[i] = 0;
+      for (int j = 0; j < num_classes; ++j) {
+        if (labels[static_cast<std::size_t>(j)] == prob->y[indices[i]]) {
+          brier[i] += (1-avg_prob[j])*(1-avg_prob[j]);
+        } else {
+          brier[i] += avg_prob[j]*avg_prob[j];
+        }
+      }
+      delete[] avg_prob;
 
       predict_labels[i] = labels[static_cast<std::size_t>(best)];
 
@@ -470,11 +489,21 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
     }
 
     for (int i = 1; i < num_ex; ++i) {
+      double *avg_prob = NULL;
+      brier[i] = 0;
       subprob.num_ex = i;
       Model *submodel = TrainVM(&subprob, param);
       predict_labels[i] = PredictVM(&subprob, submodel, subprob.x[i],
-                                    lower_bounds[i], upper_bounds[i]);
+                                    lower_bounds[i], upper_bounds[i], &avg_prob);
+      for (int j = 0; j < submodel->num_classes; ++j) {
+        if (submodel->labels[j] == subprob.y[i]) {
+          brier[i] += (1-avg_prob[j])*(1-avg_prob[j]);
+        } else {
+          brier[i] += avg_prob[j]*avg_prob[j];
+        }
+      }
       FreeModel(submodel);
+      delete[] avg_prob;
     }
     delete[] subprob.x;
     delete[] subprob.y;

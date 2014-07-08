@@ -6,45 +6,43 @@
 #include <cmath>
 #include <exception>
 
-struct Problem *ReadProblem(const char *file_name)
-{
-  std::string line;
+Problem *ReadProblem(const char *file_name) {
   std::ifstream input_file(file_name);
-  int max_index, current_max_index;
-  std::size_t elements;
-  Problem *problem = new Problem;
-
   if (!input_file.is_open()) {
     std::cerr << "Unable to open input file: " << file_name << std::endl;
     exit(EXIT_FAILURE);
   }
 
-  problem->l = 0;
-  elements = 0;
+  int max_index, current_max_index;
+  std::string line;
+  Problem *problem = new Problem;
+  problem->num_ex = 0;
 
   while (std::getline(input_file, line)) {
-    ++problem->l;
+    ++problem->num_ex;
   }
   input_file.clear();
   input_file.seekg(0);
 
-  problem->y = new double[problem->l];
-  problem->x = new Node*[problem->l];
+  problem->y = new double[problem->num_ex];
+  problem->x = new Node*[problem->num_ex];
 
   max_index = 0;
-  for (int i = 0; i < problem->l; ++i) {
+  for (int i = 0; i < problem->num_ex; ++i) {
     std::vector<std::string> tokens;
     std::size_t prev = 0, pos;
 
     current_max_index = -1;
     std::getline(input_file, line);
     while ((pos = line.find_first_of(" \t\n", prev)) != std::string::npos) {
-      if (pos > prev)
+      if (pos > prev) {
         tokens.push_back(line.substr(prev, pos-prev));
+      }
       prev = pos + 1;
     }
-    if (prev < line.length())
+    if (prev < line.length()) {
       tokens.push_back(line.substr(prev, std::string::npos));
+    }
 
     try
     {
@@ -63,11 +61,13 @@ struct Problem *ReadProblem(const char *file_name)
         delete[] problem->x[j];
       }
       delete[] problem->x;
+      delete problem;
       std::vector<std::string>(tokens).swap(tokens);
+      input_file.close();
       exit(EXIT_FAILURE);
     }  // TODO try not to use exception
 
-    elements = tokens.size();
+    std::size_t elements = tokens.size();
     problem->x[i] = new Node[elements];
     prev = 0;
     for (std::size_t j = 0; j < elements-1; ++j) {
@@ -75,7 +75,6 @@ struct Problem *ReadProblem(const char *file_name)
       try
       {
         std::size_t end;
-
         problem->x[i][j].index = std::stoi(tokens[j+1].substr(prev, pos-prev), &end);
         if (end != (tokens[j+1].substr(prev, pos-prev)).length()) {
           throw std::invalid_argument("incomplete convention");
@@ -93,7 +92,9 @@ struct Problem *ReadProblem(const char *file_name)
           delete[] problem->x[j];
         }
         delete[] problem->x;
+        delete problem;
         std::vector<std::string>(tokens).swap(tokens);
+        input_file.close();
         exit(EXIT_FAILURE);
       }
       current_max_index = problem->x[i][j].index;
@@ -105,19 +106,18 @@ struct Problem *ReadProblem(const char *file_name)
     problem->x[i][elements-1].index = -1;
     problem->x[i][elements-1].value = 0;
   }
-
   problem->max_index = max_index;
 
   // TODO add precomputed kernel check
 
   input_file.close();
+
   return problem;
 }
 
-void FreeProblem(struct Problem *problem)
-{
+void FreeProblem(struct Problem *problem) {
   delete[] problem->y;
-  for (int i = 0; i < problem->l; ++i) {
+  for (int i = 0; i < problem->num_ex; ++i) {
     delete[] problem->x[i];
   }
   delete[] problem->x;

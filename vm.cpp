@@ -24,8 +24,26 @@ double CalcCombinedDecisionValues(const double *decision_values, int num_classes
   return (sum / l) + label;
 }
 
+double CalcBinaryDecisionValues(const double *decision_values, int num_classes, int label) {
+  return decision_values[0];
+}
+
 int GetCategory(double combined_decision_values, int num_categories) {
   int category = static_cast<int>(std::floor(combined_decision_values));
+  if (category < 0) {
+    category = 0;
+  }
+  if (category >= num_categories) {
+    category = num_categories - 1;
+  }
+
+  return category;
+}
+
+int GetBinaryCategory(double combined_decision_values, int num_categories) {
+  double bin = 4.0 / num_categories;
+
+  int category = static_cast<int>((combined_decision_values+2)/bin);
   if (category < 0) {
     category = 0;
   }
@@ -51,8 +69,12 @@ Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
 
     model->knn_model = TrainKNN(train, param->knn_param);
 
-    int num_categories = model->knn_model->num_classes;
     int num_classes = model->knn_model->num_classes;
+    int num_categories = param->num_categories;
+    if (num_categories != num_classes) {
+      std::cerr << "WARNING: number of categories should be the same as number of classes in KNN. See README for details." << std::endl;
+      num_categories = num_classes;
+    }
 
     for (int i = 0; i < num_ex; ++i) {
       categories[i] = FindMostFrequent(model->knn_model->label_neighbors[i], num_neighbors);
@@ -83,9 +105,6 @@ Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
     if (num_classes == 1) {
       std::cerr << "WARNING: training set only has one class. See README for details." << std::endl;
     }
-    if (num_categories != num_classes) {
-      num_categories = num_classes;
-    }
 
     for (int i = 0; i < num_ex; ++i) {
       double *decision_values = NULL;
@@ -97,8 +116,10 @@ Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
           break;
         }
       }
-      combined_decision_values[i] = CalcCombinedDecisionValues(decision_values, num_classes, label);
-      categories[i] = GetCategory(combined_decision_values[i], num_categories);
+      // combined_decision_values[i] = CalcCombinedDecisionValues(decision_values, num_classes, label);
+      combined_decision_values[i] = CalcBinaryDecisionValues(decision_values, num_classes, label);
+      // categories[i] = GetCategory(combined_decision_values[i], num_categories);
+      categories[i] = GetBinaryCategory(combined_decision_values[i], num_categories);
       delete[] decision_values;
     }
     delete[] combined_decision_values;
@@ -213,8 +234,10 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
           break;
         }
       }
-      double combined_decision_values = CalcCombinedDecisionValues(decision_values, num_classes, label);
-      categories[num_ex] = GetCategory(combined_decision_values, num_categories);
+      // double combined_decision_values = CalcCombinedDecisionValues(decision_values, num_classes, label);
+      // categories[num_ex] = GetCategory(combined_decision_values, num_categories);
+      double combined_decision_values = CalcBinaryDecisionValues(decision_values, num_classes, label);
+      categories[num_ex] = GetBinaryCategory(combined_decision_values, num_categories);
       delete[] decision_values;
       for (int j = 0; j < num_ex; ++j) {
         if (categories[j] == categories[num_ex]) {

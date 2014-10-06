@@ -5,16 +5,20 @@
 #include <random>
 
 double CalcCombinedDecisionValues(const double *decision_values, int num_classes, int label) {
-  double sum = 0;
+  if (num_classes == 2) {
+    return decision_values[0];
+  }
+
+  double sum = 0;  // for simplicity, just divide 2, use 1-exp(-x) instead later
   int k = 0, l = 0;
   for (int i = 0; i < num_classes-1; ++i) {
     for (int j = i+1; j < num_classes; ++j) {
       if (i < label && j == label) {
-        sum -= decision_values[k]/2;
+        sum -= decision_values[k]/4;
         ++l;
       }
       if (i == label) {
-        sum += decision_values[k]/2;
+        sum += decision_values[k]/4;
         ++l;
       }
       ++k;
@@ -24,26 +28,16 @@ double CalcCombinedDecisionValues(const double *decision_values, int num_classes
   return (sum / l) + label;
 }
 
-double CalcBinaryDecisionValues(const double *decision_values, int num_classes, int label) {
-  return decision_values[0];
-}
+int GetCategory(double combined_decision_values, int num_categories, int num_classes) {
+  int category;
+  double cdv;
 
-int GetCategory(double combined_decision_values, int num_categories) {
-  int category = static_cast<int>(std::floor(combined_decision_values));
-  if (category < 0) {
-    category = 0;
+  if (num_classes == 2) {
+    cdv = (combined_decision_values + 2) * num_categories / 4.0;
+  } else {
+    cdv = combined_decision_values;
   }
-  if (category >= num_categories) {
-    category = num_categories - 1;
-  }
-
-  return category;
-}
-
-int GetBinaryCategory(double combined_decision_values, int num_categories) {
-  double bin = 4.0 / num_categories;
-
-  int category = static_cast<int>((combined_decision_values+2)/bin);
+  category = static_cast<int>(std::floor(cdv));
   if (category < 0) {
     category = 0;
   }
@@ -105,6 +99,10 @@ Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
     if (num_classes == 1) {
       std::cerr << "WARNING: training set only has one class. See README for details." << std::endl;
     }
+    if (num_classes > 2 && num_categories < num_classes) {
+      std::cerr << "WARNING: number of categories should be the same as number of classes in Multi-Class case. See README for details." << std::endl;
+      num_categories = num_classes;
+    }
 
     for (int i = 0; i < num_ex; ++i) {
       double *decision_values = NULL;
@@ -116,10 +114,8 @@ Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
           break;
         }
       }
-      // combined_decision_values[i] = CalcCombinedDecisionValues(decision_values, num_classes, label);
-      combined_decision_values[i] = CalcBinaryDecisionValues(decision_values, num_classes, label);
-      // categories[i] = GetCategory(combined_decision_values[i], num_categories);
-      categories[i] = GetBinaryCategory(combined_decision_values[i], num_categories);
+      combined_decision_values[i] = CalcCombinedDecisionValues(decision_values, num_classes, label);
+      categories[i] = GetCategory(combined_decision_values[i], num_categories, num_classes);
       delete[] decision_values;
     }
     delete[] combined_decision_values;
@@ -234,10 +230,8 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
           break;
         }
       }
-      // double combined_decision_values = CalcCombinedDecisionValues(decision_values, num_classes, label);
-      // categories[num_ex] = GetCategory(combined_decision_values, num_categories);
-      double combined_decision_values = CalcBinaryDecisionValues(decision_values, num_classes, label);
-      categories[num_ex] = GetBinaryCategory(combined_decision_values, num_categories);
+      double combined_decision_values = CalcCombinedDecisionValues(decision_values, num_classes, label);
+      categories[num_ex] = GetCategory(combined_decision_values, num_categories, num_classes);
       delete[] decision_values;
       for (int j = 0; j < num_ex; ++j) {
         if (categories[j] == categories[num_ex]) {
@@ -721,6 +715,10 @@ const char *CheckParameter(const struct Parameter *param) {
     return "cannot save and load model at the same time";
   }
 
+  if (param->num_categories == 0) {
+    return "no. of categories cannot be less than 1";
+  }
+
   if (param->taxonomy_type == KNN) {
     if (param->knn_param == NULL) {
       return "no knn parameter";
@@ -735,6 +733,10 @@ const char *CheckParameter(const struct Parameter *param) {
       return "no svm parameter";
     }
     return CheckSVMParameter(param->svm_param);
+  }
+
+  if (param->taxonomy_type > 3) {
+    return "no such taxonomy type";
   }
 
   return NULL;

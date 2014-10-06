@@ -5,16 +5,20 @@
 #include <random>
 
 double CalcCombinedDecisionValues(const double *decision_values, int num_classes, int label) {
-  double sum = 0;
+  if (num_classes == 2) {
+    return decision_values[0];
+  }
+
+  double sum = 0;  // for simplicity, just divide 2, use 1-exp(-x) instead later
   int k = 0, l = 0;
   for (int i = 0; i < num_classes-1; ++i) {
     for (int j = i+1; j < num_classes; ++j) {
       if (i < label && j == label) {
-        sum -= decision_values[k]/2;
+        sum -= decision_values[k]/4;
         ++l;
       }
       if (i == label) {
-        sum += decision_values[k]/2;
+        sum += decision_values[k]/4;
         ++l;
       }
       ++k;
@@ -24,8 +28,16 @@ double CalcCombinedDecisionValues(const double *decision_values, int num_classes
   return (sum / l) + label;
 }
 
-int GetCategory(double combined_decision_values, int num_categories) {
-  int category = static_cast<int>(std::floor(combined_decision_values));
+int GetCategory(double combined_decision_values, int num_categories, int num_classes) {
+  int category;
+  double cdv;
+
+  if (num_classes == 2) {
+    cdv = (combined_decision_values + 2) * num_categories / 4.0;
+  } else {
+    cdv = combined_decision_values;
+  }
+  category = static_cast<int>(std::floor(cdv));
   if (category < 0) {
     category = 0;
   }
@@ -51,8 +63,12 @@ Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
 
     model->knn_model = TrainKNN(train, param->knn_param);
 
-    int num_categories = model->knn_model->num_classes;
     int num_classes = model->knn_model->num_classes;
+    int num_categories = param->num_categories;
+    if (num_categories != num_classes) {
+      std::cerr << "WARNING: number of categories should be the same as number of classes in KNN. See README for details." << std::endl;
+      num_categories = num_classes;
+    }
 
     for (int i = 0; i < num_ex; ++i) {
       categories[i] = FindMostFrequent(model->knn_model->label_neighbors[i], num_neighbors);
@@ -83,7 +99,8 @@ Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
     if (num_classes == 1) {
       std::cerr << "WARNING: training set only has one class. See README for details." << std::endl;
     }
-    if (num_categories != num_classes) {
+    if (num_classes > 2 && num_categories < num_classes) {
+      std::cerr << "WARNING: number of categories should be the same as number of classes in Multi-Class case. See README for details." << std::endl;
       num_categories = num_classes;
     }
 
@@ -98,7 +115,7 @@ Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
         }
       }
       combined_decision_values[i] = CalcCombinedDecisionValues(decision_values, num_classes, label);
-      categories[i] = GetCategory(combined_decision_values[i], num_categories);
+      categories[i] = GetCategory(combined_decision_values[i], num_categories, num_classes);
       delete[] decision_values;
     }
     delete[] combined_decision_values;
@@ -214,7 +231,7 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
         }
       }
       double combined_decision_values = CalcCombinedDecisionValues(decision_values, num_classes, label);
-      categories[num_ex] = GetCategory(combined_decision_values, num_categories);
+      categories[num_ex] = GetCategory(combined_decision_values, num_categories, num_classes);
       delete[] decision_values;
       for (int j = 0; j < num_ex; ++j) {
         if (categories[j] == categories[num_ex]) {
@@ -698,6 +715,10 @@ const char *CheckParameter(const struct Parameter *param) {
     return "cannot save and load model at the same time";
   }
 
+  if (param->num_categories == 0) {
+    return "no. of categories cannot be less than 1";
+  }
+
   if (param->taxonomy_type == KNN) {
     if (param->knn_param == NULL) {
       return "no knn parameter";
@@ -712,6 +733,10 @@ const char *CheckParameter(const struct Parameter *param) {
       return "no svm parameter";
     }
     return CheckSVMParameter(param->svm_param);
+  }
+
+  if (param->taxonomy_type > 3) {
+    return "no such taxonomy type";
   }
 
   return NULL;

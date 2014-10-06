@@ -118,6 +118,7 @@ void ExitWithHelp() {
             << "    0 -- k-nearest neighbors\n"
             << "    1 -- support vector machine\n"
             << "  -k num_neighbors : set number of neighbors in kNN (default 1)\n"
+            << "  -c num_categories : set number of categories for Venn predictor\n"
             << "  -s model_file_name : save model\n"
             << "  -l model_file_name : load model\n"
             << "  -p : prefix of options to set parameters for SVM\n"
@@ -148,7 +149,7 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
   param.taxonomy_type = KNN;
   param.save_model = 0;
   param.load_model = 0;
-  param.num_categories = 1;
+  param.num_categories = 4;
   param.knn_param = new KNNParameter;
   param.svm_param = NULL;
   InitKNNParam(param.knn_param);

@@ -48,6 +48,30 @@ int GetEqualLengthCategory(double combined_decision_values, int num_categories, 
   return category;
 }
 
+double *GetEqualSizeCategory(double *combined_decision_values, int *categories, int num_categories, int num_ex) {
+  double *points = new double[num_categories];
+  size_t *index = new size_t[num_ex];
+
+  for (size_t i = 0; i < num_ex; ++i) {
+    index[i] = i;
+  }
+
+  QuickSortIndex(combined_decision_values, index, 0, num_ex-1);
+
+  int start = 0, end;
+  for (int i = 0; i < num_categories; ++i) {
+    end = start + (i+1)*num_ex/num_categories - i*num_ex/num_categories;
+    for (int j = start; j < end; ++j) {
+      categories[index[j]] = i;
+    }
+    points[i] = combined_decision_values[end];
+    start = end;
+  }
+  delete[] index;
+
+  return points;
+}
+
 Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
   Model *model = new Model;
   model->param = *param;
@@ -124,13 +148,14 @@ Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
       }
     }
     if (param->taxonomy_type == SVM_ES) {
-      categories = GetEqualSizeCategory(combined_decision_values, num_categories);
-
-
+      double *points;
+      points = GetEqualSizeCategory(combined_decision_values, categories, num_categories, num_ex);
+      clone(model->points, points, num_categories);
+      delete[] points;
     }
-    if (param->taxonomy_type == SVM_KM) {
-      categories = GetKMeansCategory(combined_decision_values, num_categories);
-    }
+    // if (param->taxonomy_type == SVM_KM) {
+    //   categories = GetKMeansCategory(combined_decision_values, num_categories);
+    // }
     delete[] combined_decision_values;
     model->num_classes = num_classes;
     model->num_ex = num_ex;
@@ -246,6 +271,18 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
       double combined_decision_values = CalcCombinedDecisionValues(decision_values, num_classes, label);
       if (param.taxonomy_type == SVM_EL) {
         categories[num_ex] = GetEqualLengthCategory(combined_decision_values, num_categories, num_classes);
+      }
+      if (param.taxonomy_type == SVM_ES) {
+        int j;
+        for (j = 0; j < num_categories; ++j) {
+          if (combined_decision_values <= model->points[j]) {
+            categories[num_ex] = j;
+            break;
+          }
+        }
+        if (j == num_categories) {
+          categories[num_ex] = num_categories - 1;
+        }
       }
       delete[] decision_values;
       for (int j = 0; j < num_ex; ++j) {

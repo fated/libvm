@@ -25,6 +25,7 @@ struct Model {
   int num_categories;
   int *labels;
   int *categories;
+  double *points;
 };
 
 Model *TrainVM(const struct Problem *train, const struct Parameter *param);

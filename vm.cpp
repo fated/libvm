@@ -56,7 +56,7 @@ double *GetEqualSizeCategory(double *combined_decision_values, int *categories, 
     index[i] = i;
   }
 
-  QuickSortIndex(combined_decision_values, index, 0, num_ex-1);
+  QuickSortIndex(combined_decision_values, index, 0, static_cast<size_t>(num_ex-1));
 
   int start = 0, end;
   for (int i = 0; i < num_categories; ++i) {
@@ -64,7 +64,7 @@ double *GetEqualSizeCategory(double *combined_decision_values, int *categories, 
     for (int j = start; j < end; ++j) {
       categories[index[j]] = i;
     }
-    points[i] = combined_decision_values[end];
+    points[i] = combined_decision_values[end-1];
     start = end;
   }
   delete[] index;
@@ -148,10 +148,20 @@ Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
       }
     }
     if (param->taxonomy_type == SVM_ES) {
-      double *points;
-      points = GetEqualSizeCategory(combined_decision_values, categories, num_categories, num_ex);
-      clone(model->points, points, num_categories);
-      delete[] points;
+      if (num_classes == 1) {
+        for (int i = 0; i < num_ex; ++i) {
+          categories[i] = 0;
+        }
+        model->points = new double[num_categories];
+        for (int i = 0; i < num_categories; ++i) {
+          model->points[i] = 0;
+        }
+      } else {
+        double *points;
+        points = GetEqualSizeCategory(combined_decision_values, categories, num_categories, num_ex);
+        clone(model->points, points, num_categories);
+        delete[] points;
+      }
     }
     // if (param->taxonomy_type == SVM_KM) {
     //   categories = GetKMeansCategory(combined_decision_values, num_categories);
@@ -273,15 +283,19 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
         categories[num_ex] = GetEqualLengthCategory(combined_decision_values, num_categories, num_classes);
       }
       if (param.taxonomy_type == SVM_ES) {
-        int j;
-        for (j = 0; j < num_categories; ++j) {
-          if (combined_decision_values <= model->points[j]) {
-            categories[num_ex] = j;
-            break;
+        if (num_classes == 1) {
+          categories[num_ex] = 0;
+        } else {
+          int j;
+          for (j = 0; j < num_categories; ++j) {
+            if (combined_decision_values <= model->points[j]) {
+              categories[num_ex] = j;
+              break;
+            }
           }
-        }
-        if (j == num_categories) {
-          categories[num_ex] = num_categories - 1;
+          if (j == num_categories) {
+            categories[num_ex] = num_categories - 1;
+          }
         }
       }
       delete[] decision_values;
@@ -608,6 +622,15 @@ int SaveModel(const char *model_file_name, const struct Model *model) {
     SaveSVMModel(model_file, model->svm_model);
   }
 
+  if (param.taxonomy_type == SVM_ES &&
+      model->points) {
+    model_file << "points\n";
+    for (int i = 0; i < model->num_categories; ++i) {
+      model_file << model->points[i] << ' ';
+    }
+    model_file << '\n';
+  }
+
   if (model->categories) {
     model_file << "categories\n";
     for (int i = 0; i < model->num_ex; ++i) {
@@ -665,14 +688,6 @@ Model *LoadModel(const char *model_file_name) {
       model_file >> param.num_categories;
       model->num_categories = param.num_categories;
     } else
-    if (std::strcmp(cmd, "categories") == 0) {
-      int num_ex = model->num_ex;
-      model->categories = new int[num_ex];
-      for (int i = 0; i < num_ex; ++i) {
-        model_file >> model->categories[i];
-      }
-      break;
-    } else
     if (std::strcmp(cmd, "knn_model") == 0) {
       model->knn_model = LoadKNNModel(model_file);
       if (model->knn_model == NULL) {
@@ -698,6 +713,21 @@ Model *LoadModel(const char *model_file_name) {
       model->num_classes = model->svm_model->num_classes;
       clone(model->labels, model->svm_model->labels, model->num_classes);
       model->param.svm_param = &model->svm_model->param;
+    } else
+    if (std::strcmp(cmd, "points") == 0) {
+      int num_categories = model->num_categories;
+      model->points = new double[num_categories];
+      for (int i = 0; i < num_categories; ++i) {
+        model_file >> model->points[i];
+      }
+    } else
+    if (std::strcmp(cmd, "categories") == 0) {
+      int num_ex = model->num_ex;
+      model->categories = new int[num_ex];
+      for (int i = 0; i < num_ex; ++i) {
+        model_file >> model->categories[i];
+      }
+      break;
     } else {
       std::cerr << "Unknown text in model file: " << cmd << std::endl;
       FreeModel(model);
@@ -733,9 +763,14 @@ void FreeModel(struct Model *model) {
     model->labels = NULL;
   }
 
+  if (model->param.taxonomy_type == SVM_ES &&
+      model->points != NULL) {
+    delete[] model->points;
+    model->points = NULL;
+  }
   if (model->categories != NULL) {
     delete[] model->categories;
-    model->labels = NULL;
+    model->categories = NULL;
   }
 
   delete model;

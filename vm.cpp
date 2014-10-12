@@ -72,6 +72,61 @@ double *GetEqualSizeCategory(double *combined_decision_values, int *categories, 
   return points;
 }
 
+int AssignCluster(const int num_clusters, const double value, const double *centroid){
+  double min = fabs(value-centroid[0]);
+  int cluster = 0;
+
+  for (int i = 1; i < num_clusters; ++i) {
+    if (fabs(value-centroid[i]) < min)
+    {
+      min = fabs(value-centroid[i]);
+      cluster = i;
+    }
+  }
+
+  return cluster;
+}
+
+bool IsConverge(const int num_clusters, const double *centroid, const double *last_centroid, const double epsilon = kEpsilon){
+  for (int i = 0; i < num_clusters; ++i){
+    if (fabs(centroid[i]-last_centroid[i]) > epsilon)
+      return false;
+  }
+
+  return true;
+}
+
+double *GetKMeansCategory(const double *combined_decision_values, int *categories, int num_categories, int num_ex, double epsilon = kEpsilon) {
+  double *centroid = new double[num_categories];
+  double *last_centroid = new double[num_categories];
+
+  for (int i = 0; i < num_categories; ++i) {
+    centroid[i] = i + 0.5;
+    last_centroid[i] = 0;
+  }
+
+  while (!IsConverge(num_categories, centroid, last_centroid, kEpsilon)) {
+    delete[] last_centroid;
+    clone(last_centroid, centroid, num_categories);
+    double count[num_categories];
+    for (int i = 0; i < num_categories; ++i) {
+      count[i] = 0;
+      centroid[i] = 0;
+    }
+    for (int i = 0; i < num_ex; ++i) {
+      categories[i] = AssignCluster(num_categories, combined_decision_values[i], last_centroid);
+      count[categories[i]]++;
+      centroid[categories[i]] += combined_decision_values[i];
+    }
+    for (int i = 0; i < num_categories; ++i) {
+      centroid[i] /= count[i];
+    }
+  }
+  delete[] last_centroid;
+
+  return centroid;
+}
+
 Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
   Model *model = new Model;
   model->param = *param;
@@ -163,9 +218,12 @@ Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
         delete[] points;
       }
     }
-    // if (param->taxonomy_type == SVM_KM) {
-    //   categories = GetKMeansCategory(combined_decision_values, num_categories);
-    // }
+    if (param->taxonomy_type == SVM_KM) {
+      double *points;
+      points = GetKMeansCategory(combined_decision_values, categories, num_categories, num_ex, kEpsilon);
+      clone(model->points, points, num_categories);
+      delete[] points;
+    }
     delete[] combined_decision_values;
     model->num_classes = num_classes;
     model->num_ex = num_ex;
@@ -297,6 +355,9 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
             categories[num_ex] = num_categories - 1;
           }
         }
+      }
+      if (param.taxonomy_type == SVM_KM) {
+        categories[num_ex] = AssignCluster(num_categories, combined_decision_values, model->points);
       }
       delete[] decision_values;
       for (int j = 0; j < num_ex; ++j) {
@@ -622,7 +683,8 @@ int SaveModel(const char *model_file_name, const struct Model *model) {
     SaveSVMModel(model_file, model->svm_model);
   }
 
-  if (param.taxonomy_type == SVM_ES &&
+  if ((param.taxonomy_type == SVM_ES ||
+       param.taxonomy_type == SVM_KM) &&
       model->points) {
     model_file << "points\n";
     for (int i = 0; i < model->num_categories; ++i) {

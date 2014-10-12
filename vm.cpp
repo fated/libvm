@@ -530,7 +530,7 @@ void CrossValidation(const struct Problem *prob, const struct Parameter *param,
 
     for (int j = begin; j < end; ++j) {
       double *avg_prob = NULL;
-      brier[i] = 0;
+      brier[perm[j]] = 0;
 
       predict_labels[perm[j]] = PredictVM(&subprob, submodel, prob->x[perm[j]], lower_bounds[perm[j]], upper_bounds[perm[j]], &avg_prob);
 

@@ -149,8 +149,8 @@ void GroupClasses(const Problem *prob, int *num_classes_ret, int **labels_ret, i
     if (j == num_classes) {
       if (num_classes == max_num_classes) {
         max_num_classes *= 2;
-        labels = (int *)realloc(labels,(unsigned long)max_num_classes*sizeof(int));
-        count = (int *)realloc(count,(unsigned long)max_num_classes*sizeof(int));
+        labels = (int *)realloc(labels, (unsigned long)max_num_classes*sizeof(int));
+        count = (int *)realloc(count, (unsigned long)max_num_classes*sizeof(int));
       }
       labels[num_classes] = this_label;
       count[num_classes] = 1;
@@ -177,15 +177,17 @@ void GroupClasses(const Problem *prob, int *num_classes_ret, int **labels_ret, i
 
   int *start = new int[num_classes];
   start[0] = 0;
-  for (int i = 1; i < num_classes; ++i)
+  for (int i = 1; i < num_classes; ++i) {
     start[i] = start[i-1] + count[i-1];
+  }
   for (int i = 0; i < num_ex; ++i) {
     perm[start[data_labels[i]]] = i;
     ++start[data_labels[i]];
   }
   start[0] = 0;
-  for (int i = 1; i < num_classes; ++i)
+  for (int i = 1; i < num_classes; ++i) {
     start[i] = start[i-1] + count[i-1];
+  }
 
   *num_classes_ret = num_classes;
   *labels_ret = labels;

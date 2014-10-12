@@ -87,5 +87,6 @@ void QuickSortIndex(T array[], size_t index[], size_t left, size_t right) {
 
 Problem *ReadProblem(const char *file_name);
 void FreeProblem(struct Problem *problem);
+void GroupClasses(const Problem *prob, int *num_classes_ret, int **labels_ret, int **start_ret, int **count_ret, int *perm);
 
 #endif  // LIBVM_UTILITIES_H_

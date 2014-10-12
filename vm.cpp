@@ -426,6 +426,135 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
   return predict_label;
 }
 
+void CrossValidation(const struct Problem *prob, const struct Parameter *param,
+    double *predict_labels, double *lower_bounds, double *upper_bounds,
+    double *brier, double *logloss) {
+  int num_folds = param->num_folds;
+  int num_ex = prob->num_ex;
+  int num_classes;
+
+  int *fold_start;
+  int *perm = new int[num_ex];
+
+  if (num_folds > num_ex) {
+    num_folds = num_ex;
+    std::cerr << "WARNING: number of folds > number of data. Will use number of folds = number of data instead (i.e., leave-one-out cross validation)" << std::endl;
+  }
+  fold_start = new int[num_folds+1];
+
+  if (num_folds < num_ex) {
+    int *start = NULL;
+    int *label = NULL;
+    int *count = NULL;
+    GroupClasses(prob, &num_classes, &label, &start, &count, perm);
+
+    int *fold_count = new int[num_folds];
+    int *index = new int[num_ex];
+
+    for (int i = 0; i < num_ex; ++i) {
+      index[i] = perm[i];
+    }
+    std::random_device rd;
+    std::mt19937 g(rd());
+    for (int i = 0; i < num_classes; ++i) {
+      std::shuffle(index+start[i], index+start[i]+count[i], g);
+    }
+
+    for (int i = 0; i < num_folds; ++i) {
+      fold_count[i] = 0;
+      for (int c = 0; c < num_classes; ++c) {
+        fold_count[i] += (i+1)*count[c]/num_folds - i*count[c]/num_folds;
+      }
+    }
+
+    fold_start[0] = 0;
+    for (int i = 1; i <= num_folds; ++i) {
+      fold_start[i] = fold_start[i-1] + fold_count[i-1];
+    }
+    for (int c = 0; c < num_classes; ++c) {
+      for (int i = 0; i < num_folds; ++i) {
+        int begin = start[c] + i*count[c]/num_folds;
+        int end = start[c] + (i+1)*count[c]/num_folds;
+        for (int j = begin; j < end; ++j) {
+          perm[fold_start[i]] = index[j];
+          fold_start[i]++;
+        }
+      }
+    }
+    fold_start[0] = 0;
+    for (int i = 1; i <= num_folds; ++i) {
+      fold_start[i] = fold_start[i-1] + fold_count[i-1];
+    }
+    delete[] start;
+    delete[] label;
+    delete[] count;
+    delete[] index;
+    delete[] fold_count;
+
+  } else {
+
+    for (int i = 0; i < num_ex; ++i) {
+      perm[i] = i;
+    }
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(perm, perm+num_ex, g);
+    fold_start[0] = 0;
+    for (int i = 1; i <= num_folds; ++i) {
+      fold_start[i] = fold_start[i-1] + (i+1)*num_ex/num_folds - i*num_ex/num_folds;
+    }
+  }
+
+  for (int i = 0; i < num_folds; ++i) {
+    int begin = fold_start[i];
+    int end = fold_start[i+1];
+    int k = 0;
+    struct Problem subprob;
+
+    subprob.num_ex = num_ex - (end-begin);
+    subprob.x = new Node*[subprob.num_ex];
+    subprob.y = new double[subprob.num_ex];
+
+    for (int j = 0; j < begin; ++j) {
+      subprob.x[k] = prob->x[perm[j]];
+      subprob.y[k] = prob->y[perm[j]];
+      ++k;
+    }
+    for (int j = end; j < num_ex; ++j) {
+      subprob.x[k] = prob->x[perm[j]];
+      subprob.y[k] = prob->y[perm[j]];
+      ++k;
+    }
+
+    struct Model *submodel = TrainVM(&subprob, param);
+
+    for (int j = begin; j < end; ++j) {
+      double *avg_prob = NULL;
+      brier[i] = 0;
+
+      predict_labels[perm[j]] = PredictVM(&subprob, submodel, prob->x[perm[j]], lower_bounds[perm[j]], upper_bounds[perm[j]], &avg_prob);
+
+      for (k = 0; k < submodel->num_classes; ++k) {
+        if (submodel->labels[k] == prob->y[perm[j]]) {
+          brier[perm[j]] += (1-avg_prob[k]) * (1-avg_prob[k]);
+          double tmp = std::fmax(std::fmin(avg_prob[k], 1-kEpsilon), kEpsilon);
+          logloss[perm[j]] = - std::log(tmp);
+        } else {
+          brier[perm[j]] += avg_prob[k] * avg_prob[k];
+        }
+      }
+      delete[] avg_prob;
+    }
+    FreeModel(submodel);
+    delete[] subprob.x;
+    delete[] subprob.y;
+  }
+  delete[] fold_start;
+  delete[] perm;
+
+  return;
+}
+
 void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
     double *predict_labels, int *indices,
     double *lower_bounds, double *upper_bounds,

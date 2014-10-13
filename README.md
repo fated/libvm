@@ -12,7 +12,7 @@ LibVM is a simple, easy-to-use, and efficient software for Venn Machine on class
 * [Examples](#examples)
 * [Library Usage](#library-usage)
 * [Additional Information](#additional-information)
-* [Special Thanks](#special-thanks)
+* [Acknowledgments](#acknowledgments)
 
 ## Installation and Data Format[↩](#table-of-contents)
 

@@ -14,6 +14,7 @@ struct Parameter {
   int save_model;
   int load_model;
   int taxonomy_type;
+  int num_folds;
 };
 
 struct Model {
@@ -25,10 +26,12 @@ struct Model {
   int num_categories;
   int *labels;
   int *categories;
+  double *points;
 };
 
 Model *TrainVM(const struct Problem *train, const struct Parameter *param);
 double PredictVM(const struct Problem *train, const struct Model *model, const struct Node *x, double &lower, double &upper, double **avg_prob);
+void CrossValidation(const struct Problem *prob, const struct Parameter *param, double *predict_labels, double *lower_bounds, double *upper_bounds, double *brier, double *logloss);
 void OnlinePredict(const struct Problem *prob, const struct Parameter *param, double *predict_labels, int *indices, double *lower_bounds, double *upper_bounds, double *brier, double *logloss);
 
 int SaveModel(const char *model_file_name, const struct Model *model);

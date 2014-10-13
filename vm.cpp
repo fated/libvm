@@ -5,16 +5,20 @@
 #include <random>
 
 double CalcCombinedDecisionValues(const double *decision_values, int num_classes, int label) {
-  double sum = 0;
+  if (num_classes == 2) {
+    return decision_values[0];
+  }
+
+  double sum = 0;  // for simplicity, just divide 2, use 1-exp(-x) instead later
   int k = 0, l = 0;
   for (int i = 0; i < num_classes-1; ++i) {
     for (int j = i+1; j < num_classes; ++j) {
       if (i < label && j == label) {
-        sum -= decision_values[k]/2;
+        sum -= decision_values[k]/4;
         ++l;
       }
       if (i == label) {
-        sum += decision_values[k]/2;
+        sum += decision_values[k]/4;
         ++l;
       }
       ++k;
@@ -24,8 +28,16 @@ double CalcCombinedDecisionValues(const double *decision_values, int num_classes
   return (sum / l) + label;
 }
 
-int GetCategory(double combined_decision_values, int num_categories) {
-  int category = static_cast<int>(std::floor(combined_decision_values));
+int GetEqualLengthCategory(double combined_decision_values, int num_categories, int num_classes) {
+  int category;
+  double cdv;
+
+  if (num_classes == 2) {
+    cdv = (combined_decision_values + 2) * num_categories / 4.0;
+  } else {
+    cdv = combined_decision_values;
+  }
+  category = static_cast<int>(std::floor(cdv));
   if (category < 0) {
     category = 0;
   }
@@ -34,6 +46,85 @@ int GetCategory(double combined_decision_values, int num_categories) {
   }
 
   return category;
+}
+
+double *GetEqualSizeCategory(double *combined_decision_values, int *categories, int num_categories, int num_ex) {
+  double *points = new double[num_categories];
+  size_t *index = new size_t[num_ex];
+
+  for (size_t i = 0; i < num_ex; ++i) {
+    index[i] = i;
+  }
+
+  QuickSortIndex(combined_decision_values, index, 0, static_cast<size_t>(num_ex-1));
+
+  int start = 0, end;
+  for (int i = 0; i < num_categories; ++i) {
+    end = start + (i+1)*num_ex/num_categories - i*num_ex/num_categories;
+    for (int j = start; j < end; ++j) {
+      categories[index[j]] = i;
+    }
+    points[i] = combined_decision_values[end-1];
+    start = end;
+  }
+  delete[] index;
+
+  return points;
+}
+
+int AssignCluster(const int num_clusters, const double value, const double *centroid){
+  double min = fabs(value-centroid[0]);
+  int cluster = 0;
+
+  for (int i = 1; i < num_clusters; ++i) {
+    if (fabs(value-centroid[i]) < min)
+    {
+      min = fabs(value-centroid[i]);
+      cluster = i;
+    }
+  }
+
+  return cluster;
+}
+
+bool IsConverge(const int num_clusters, const double *centroid, const double *last_centroid, const double epsilon = kEpsilon){
+  for (int i = 0; i < num_clusters; ++i){
+    if (fabs(centroid[i]-last_centroid[i]) > epsilon)
+      return false;
+  }
+
+  return true;
+}
+
+double *GetKMeansCategory(const double *combined_decision_values, int *categories, int num_categories, int num_ex, double epsilon = kEpsilon) {
+  double *centroid = new double[num_categories];
+  double *last_centroid = new double[num_categories];
+
+  for (int i = 0; i < num_categories; ++i) {
+    centroid[i] = i + 0.5;
+    last_centroid[i] = 0;
+  }
+
+  while (!IsConverge(num_categories, centroid, last_centroid, kEpsilon)) {
+    delete[] last_centroid;
+    clone(last_centroid, centroid, num_categories);
+    double count[num_categories];
+    for (int i = 0; i < num_categories; ++i) {
+      count[i] = 0;
+      centroid[i] = 0;
+    }
+    for (int i = 0; i < num_ex; ++i) {
+      categories[i] = AssignCluster(num_categories, combined_decision_values[i], last_centroid);
+      count[categories[i]]++;
+      centroid[categories[i]] += combined_decision_values[i];
+    }
+    for (int i = 0; i < num_categories; ++i) {
+      centroid[i] /= count[i];
+    }
+  }
+  delete[] last_centroid;
+
+  return centroid;
 }
 
 Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
@@ -51,8 +142,12 @@ Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
 
     model->knn_model = TrainKNN(train, param->knn_param);
 
-    int num_categories = model->knn_model->num_classes;
     int num_classes = model->knn_model->num_classes;
+    int num_categories = param->num_categories;
+    if (num_categories != num_classes) {
+      std::cerr << "WARNING: number of categories should be the same as number of classes in KNN. See README for details." << std::endl;
+      num_categories = num_classes;
+    }
 
     for (int i = 0; i < num_ex; ++i) {
       categories[i] = FindMostFrequent(model->knn_model->label_neighbors[i], num_neighbors);
@@ -83,7 +178,8 @@ Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
     if (num_classes == 1) {
       std::cerr << "WARNING: training set only has one class. See README for details." << std::endl;
     }
-    if (num_categories != num_classes) {
+    if (num_classes > 2 && num_categories < num_classes) {
+      std::cerr << "WARNING: number of categories should be the same as number of classes in Multi-Class case. See README for details." << std::endl;
       num_categories = num_classes;
     }
 
@@ -98,8 +194,35 @@ Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
         }
       }
       combined_decision_values[i] = CalcCombinedDecisionValues(decision_values, num_classes, label);
-      categories[i] = GetCategory(combined_decision_values[i], num_categories);
       delete[] decision_values;
+    }
+
+    if (param->taxonomy_type == SVM_EL) {
+      for (int i = 0; i < num_ex; ++i) {
+        categories[i] = GetEqualLengthCategory(combined_decision_values[i], num_categories, num_classes);
+      }
+    }
+    if (param->taxonomy_type == SVM_ES) {
+      if (num_classes == 1) {
+        for (int i = 0; i < num_ex; ++i) {
+          categories[i] = 0;
+        }
+        model->points = new double[num_categories];
+        for (int i = 0; i < num_categories; ++i) {
+          model->points[i] = 0;
+        }
+      } else {
+        double *points;
+        points = GetEqualSizeCategory(combined_decision_values, categories, num_categories, num_ex);
+        clone(model->points, points, num_categories);
+        delete[] points;
+      }
+    }
+    if (param->taxonomy_type == SVM_KM) {
+      double *points;
+      points = GetKMeansCategory(combined_decision_values, categories, num_categories, num_ex, kEpsilon);
+      clone(model->points, points, num_categories);
+      delete[] points;
     }
     delete[] combined_decision_values;
     model->num_classes = num_classes;
@@ -214,7 +337,28 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
         }
       }
       double combined_decision_values = CalcCombinedDecisionValues(decision_values, num_classes, label);
-      categories[num_ex] = GetCategory(combined_decision_values, num_categories);
+      if (param.taxonomy_type == SVM_EL) {
+        categories[num_ex] = GetEqualLengthCategory(combined_decision_values, num_categories, num_classes);
+      }
+      if (param.taxonomy_type == SVM_ES) {
+        if (num_classes == 1) {
+          categories[num_ex] = 0;
+        } else {
+          int j;
+          for (j = 0; j < num_categories; ++j) {
+            if (combined_decision_values <= model->points[j]) {
+              categories[num_ex] = j;
+              break;
+            }
+          }
+          if (j == num_categories) {
+            categories[num_ex] = num_categories - 1;
+          }
+        }
+      }
+      if (param.taxonomy_type == SVM_KM) {
+        categories[num_ex] = AssignCluster(num_categories, combined_decision_values, model->points);
+      }
       delete[] decision_values;
       for (int j = 0; j < num_ex; ++j) {
         if (categories[j] == categories[num_ex]) {
@@ -280,6 +424,135 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
   delete[] matrix;
 
   return predict_label;
+}
+
+void CrossValidation(const struct Problem *prob, const struct Parameter *param,
+    double *predict_labels, double *lower_bounds, double *upper_bounds,
+    double *brier, double *logloss) {
+  int num_folds = param->num_folds;
+  int num_ex = prob->num_ex;
+  int num_classes;
+
+  int *fold_start;
+  int *perm = new int[num_ex];
+
+  if (num_folds > num_ex) {
+    num_folds = num_ex;
+    std::cerr << "WARNING: number of folds > number of data. Will use number of folds = number of data instead (i.e., leave-one-out cross validation)" << std::endl;
+  }
+  fold_start = new int[num_folds+1];
+
+  if (num_folds < num_ex) {
+    int *start = NULL;
+    int *label = NULL;
+    int *count = NULL;
+    GroupClasses(prob, &num_classes, &label, &start, &count, perm);
+
+    int *fold_count = new int[num_folds];
+    int *index = new int[num_ex];
+
+    for (int i = 0; i < num_ex; ++i) {
+      index[i] = perm[i];
+    }
+    std::random_device rd;
+    std::mt19937 g(rd());
+    for (int i = 0; i < num_classes; ++i) {
+      std::shuffle(index+start[i], index+start[i]+count[i], g);
+    }
+
+    for (int i = 0; i < num_folds; ++i) {
+      fold_count[i] = 0;
+      for (int c = 0; c < num_classes; ++c) {
+        fold_count[i] += (i+1)*count[c]/num_folds - i*count[c]/num_folds;
+      }
+    }
+
+    fold_start[0] = 0;
+    for (int i = 1; i <= num_folds; ++i) {
+      fold_start[i] = fold_start[i-1] + fold_count[i-1];
+    }
+    for (int c = 0; c < num_classes; ++c) {
+      for (int i = 0; i < num_folds; ++i) {
+        int begin = start[c] + i*count[c]/num_folds;
+        int end = start[c] + (i+1)*count[c]/num_folds;
+        for (int j = begin; j < end; ++j) {
+          perm[fold_start[i]] = index[j];
+          fold_start[i]++;
+        }
+      }
+    }
+    fold_start[0] = 0;
+    for (int i = 1; i <= num_folds; ++i) {
+      fold_start[i] = fold_start[i-1] + fold_count[i-1];
+    }
+    delete[] start;
+    delete[] label;
+    delete[] count;
+    delete[] index;
+    delete[] fold_count;
+
+  } else {
+
+    for (int i = 0; i < num_ex; ++i) {
+      perm[i] = i;
+    }
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(perm, perm+num_ex, g);
+    fold_start[0] = 0;
+    for (int i = 1; i <= num_folds; ++i) {
+      fold_start[i] = fold_start[i-1] + (i+1)*num_ex/num_folds - i*num_ex/num_folds;
+    }
+  }
+
+  for (int i = 0; i < num_folds; ++i) {
+    int begin = fold_start[i];
+    int end = fold_start[i+1];
+    int k = 0;
+    struct Problem subprob;
+
+    subprob.num_ex = num_ex - (end-begin);
+    subprob.x = new Node*[subprob.num_ex];
+    subprob.y = new double[subprob.num_ex];
+
+    for (int j = 0; j < begin; ++j) {
+      subprob.x[k] = prob->x[perm[j]];
+      subprob.y[k] = prob->y[perm[j]];
+      ++k;
+    }
+    for (int j = end; j < num_ex; ++j) {
+      subprob.x[k] = prob->x[perm[j]];
+      subprob.y[k] = prob->y[perm[j]];
+      ++k;
+    }
+
+    struct Model *submodel = TrainVM(&subprob, param);
+
+    for (int j = begin; j < end; ++j) {
+      double *avg_prob = NULL;
+      brier[perm[j]] = 0;
+
+      predict_labels[perm[j]] = PredictVM(&subprob, submodel, prob->x[perm[j]], lower_bounds[perm[j]], upper_bounds[perm[j]], &avg_prob);
+
+      for (k = 0; k < submodel->num_classes; ++k) {
+        if (submodel->labels[k] == prob->y[perm[j]]) {
+          brier[perm[j]] += (1-avg_prob[k]) * (1-avg_prob[k]);
+          double tmp = std::fmax(std::fmin(avg_prob[k], 1-kEpsilon), kEpsilon);
+          logloss[perm[j]] = - std::log(tmp);
+        } else {
+          brier[perm[j]] += avg_prob[k] * avg_prob[k];
+        }
+      }
+      delete[] avg_prob;
+    }
+    FreeModel(submodel);
+    delete[] subprob.x;
+    delete[] subprob.y;
+  }
+  delete[] fold_start;
+  delete[] perm;
+
+  return;
 }
 
 void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
@@ -499,11 +772,11 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
                                     lower_bounds[i], upper_bounds[i], &avg_prob);
       for (int j = 0; j < submodel->num_classes; ++j) {
         if (submodel->labels[j] == subprob.y[i]) {
-          brier[i] += (1-avg_prob[j])*(1-avg_prob[j]);
+          brier[i] += (1-avg_prob[j]) * (1-avg_prob[j]);
           double tmp = std::fmax(std::fmin(avg_prob[j], 1-kEpsilon), kEpsilon);
           logloss[i] = - std::log(tmp);
         } else {
-          brier[i] += avg_prob[j]*avg_prob[j];
+          brier[i] += avg_prob[j] * avg_prob[j];
         }
       }
       FreeModel(submodel);
@@ -537,6 +810,16 @@ int SaveModel(const char *model_file_name, const struct Model *model) {
       param.taxonomy_type == SVM_ES ||
       param.taxonomy_type == SVM_KM) {
     SaveSVMModel(model_file, model->svm_model);
+  }
+
+  if ((param.taxonomy_type == SVM_ES ||
+       param.taxonomy_type == SVM_KM) &&
+      model->points) {
+    model_file << "points\n";
+    for (int i = 0; i < model->num_categories; ++i) {
+      model_file << model->points[i] << ' ';
+    }
+    model_file << '\n';
   }
 
   if (model->categories) {
@@ -596,14 +879,6 @@ Model *LoadModel(const char *model_file_name) {
       model_file >> param.num_categories;
       model->num_categories = param.num_categories;
     } else
-    if (std::strcmp(cmd, "categories") == 0) {
-      int num_ex = model->num_ex;
-      model->categories = new int[num_ex];
-      for (int i = 0; i < num_ex; ++i) {
-        model_file >> model->categories[i];
-      }
-      break;
-    } else
     if (std::strcmp(cmd, "knn_model") == 0) {
       model->knn_model = LoadKNNModel(model_file);
       if (model->knn_model == NULL) {
@@ -629,6 +904,21 @@ Model *LoadModel(const char *model_file_name) {
       model->num_classes = model->svm_model->num_classes;
       clone(model->labels, model->svm_model->labels, model->num_classes);
       model->param.svm_param = &model->svm_model->param;
+    } else
+    if (std::strcmp(cmd, "points") == 0) {
+      int num_categories = model->num_categories;
+      model->points = new double[num_categories];
+      for (int i = 0; i < num_categories; ++i) {
+        model_file >> model->points[i];
+      }
+    } else
+    if (std::strcmp(cmd, "categories") == 0) {
+      int num_ex = model->num_ex;
+      model->categories = new int[num_ex];
+      for (int i = 0; i < num_ex; ++i) {
+        model_file >> model->categories[i];
+      }
+      break;
     } else {
       std::cerr << "Unknown text in model file: " << cmd << std::endl;
       FreeModel(model);
@@ -664,9 +954,14 @@ void FreeModel(struct Model *model) {
     model->labels = NULL;
   }
 
+  if (model->param.taxonomy_type == SVM_ES &&
+      model->points != NULL) {
+    delete[] model->points;
+    model->points = NULL;
+  }
   if (model->categories != NULL) {
     delete[] model->categories;
-    model->labels = NULL;
+    model->categories = NULL;
   }
 
   delete model;
@@ -698,6 +993,10 @@ const char *CheckParameter(const struct Parameter *param) {
     return "cannot save and load model at the same time";
   }
 
+  if (param->num_categories == 0) {
+    return "no. of categories cannot be less than 1";
+  }
+
   if (param->taxonomy_type == KNN) {
     if (param->knn_param == NULL) {
       return "no knn parameter";
@@ -712,6 +1011,10 @@ const char *CheckParameter(const struct Parameter *param) {
       return "no svm parameter";
     }
     return CheckSVMParameter(param->svm_param);
+  }
+
+  if (param->taxonomy_type > 3) {
+    return "no such taxonomy type";
   }
 
   return NULL;

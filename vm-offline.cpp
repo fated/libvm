@@ -115,9 +115,12 @@ void ExitWithHelp() {
   std::cout << "Usage: vm-offline [options] train_file test_file [output_file]\n"
             << "options:\n"
             << "  -t taxonomy_type : set type of taxonomy (default 0)\n"
-            << "    0 -- k-nearest neighbors\n"
-            << "    1 -- support vector machine\n"
+            << "    0 -- k-nearest neighbors (KNN)\n"
+            << "    1 -- support vector machine with equal length (SVM_EL)\n"
+            << "    2 -- support vector machine with equal size (SVM_ES)\n"
+            << "    3 -- support vector machine with k-means clustering (SVM_KM)\n"
             << "  -k num_neighbors : set number of neighbors in kNN (default 1)\n"
+            << "  -c num_categories : set number of categories for Venn predictor (default 4)\n"
             << "  -s model_file_name : save model\n"
             << "  -l model_file_name : load model\n"
             << "  -p : prefix of options to set parameters for SVM\n"
@@ -148,7 +151,7 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
   param.taxonomy_type = KNN;
   param.save_model = 0;
   param.load_model = 0;
-  param.num_categories = 1;
+  param.num_categories = 4;
   param.knn_param = new KNNParameter;
   param.svm_param = NULL;
   InitKNNParam(param.knn_param);

@@ -83,6 +83,7 @@ int main(int argc, char *argv[]) {
   delete[] lower_bounds;
   delete[] upper_bounds;
   delete[] brier;
+  delete[] logloss;
 
   return 0;
 }
@@ -91,13 +92,13 @@ void ExitWithHelp() {
   std::cout << "Usage: vm-cv [options] data_file [output_file]\n"
             << "options:\n"
             << "  -t taxonomy_type : set type of taxonomy (default 0)\n"
-            << "    0 -- k-nearest neighbors\n"
+            << "    0 -- k-nearest neighbors (KNN)\n"
             << "    1 -- support vector machine with equal length (SVM_EL)\n"
             << "    2 -- support vector machine with equal size (SVM_ES)\n"
             << "    3 -- support vector machine with k-means clustering (SVM_KM)\n"
             << "  -k num_neighbors : set number of neighbors in kNN (default 1)\n"
-            << "  -c num_categories : set number of categories for Venn predictor\n"
-            << "  -v num_folds : set number of folders in cross validation\n"
+            << "  -c num_categories : set number of categories for Venn predictor (default 4)\n"
+            << "  -v num_folds : set number of folders in cross validation (default 5)\n"
             << "  -p : prefix of options to set parameters for SVM\n"
             << "    -ps svm_type : set type of SVM (default 0)\n"
             << "      0 -- C-SVC    (multi-class classification)\n"
@@ -127,7 +128,7 @@ void ParseCommandLine(int argc, char **argv, char *data_file_name, char *output_
   param.save_model = 0;
   param.load_model = 0;
   param.num_categories = 4;
-  param.num_folds = 0;
+  param.num_folds = 5;
   param.knn_param = new KNNParameter;
   param.svm_param = NULL;
   InitKNNParam(param.knn_param);

@@ -772,11 +772,11 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
                                     lower_bounds[i], upper_bounds[i], &avg_prob);
       for (int j = 0; j < submodel->num_classes; ++j) {
         if (submodel->labels[j] == subprob.y[i]) {
-          brier[i] += (1-avg_prob[j])*(1-avg_prob[j]);
+          brier[i] += (1-avg_prob[j]) * (1-avg_prob[j]);
           double tmp = std::fmax(std::fmin(avg_prob[j], 1-kEpsilon), kEpsilon);
           logloss[i] = - std::log(tmp);
         } else {
-          brier[i] += avg_prob[j]*avg_prob[j];
+          brier[i] += avg_prob[j] * avg_prob[j];
         }
       }
       FreeModel(submodel);

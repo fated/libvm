@@ -71,7 +71,7 @@ int main(int argc, char *argv[]) {
   avg_brier /= prob->num_ex - 1;
   avg_logloss /= prob->num_ex - 1;
 
-  std::cout << "Accuracy: " << 100.0*num_correct/(prob->num_ex-1) << '%'
+  std::cout << "Online Accuracy: " << 100.0*num_correct/(prob->num_ex-1) << '%'
             << " (" << num_correct << '/' << prob->num_ex-1 << ") "
             << "Probabilities: [" << std::fixed << std::setprecision(4) << 100*avg_lower_bound << "%, "
             << 100*avg_upper_bound << "%] "
@@ -87,6 +87,7 @@ int main(int argc, char *argv[]) {
   delete[] lower_bounds;
   delete[] upper_bounds;
   delete[] brier;
+  delete[] logloss;
   delete[] indices;
 
   return 0;
@@ -96,12 +97,12 @@ void ExitWithHelp() {
   std::cout << "Usage: vm-online [options] data_file [output_file]\n"
             << "options:\n"
             << "  -t taxonomy_type : set type of taxonomy (default 0)\n"
-            << "    0 -- k-nearest neighbors\n"
+            << "    0 -- k-nearest neighbors (KNN)\n"
             << "    1 -- support vector machine with equal length (SVM_EL)\n"
             << "    2 -- support vector machine with equal size (SVM_ES)\n"
             << "    3 -- support vector machine with k-means clustering (SVM_KM)\n"
             << "  -k num_neighbors : set number of neighbors in kNN (default 1)\n"
-            << "  -c num_categories : set number of categories for Venn predictor\n"
+            << "  -c num_categories : set number of categories for Venn predictor (default 4)\n"
             << "  -p : prefix of options to set parameters for SVM\n"
             << "    -ps svm_type : set type of SVM (default 0)\n"
             << "      0 -- C-SVC    (multi-class classification)\n"

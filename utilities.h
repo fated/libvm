@@ -4,10 +4,10 @@
 #include <iostream>
 #include <vector>
 #include <map>
+#include <cmath>
 
-#define INF HUGE_VAL
-#define TAU 1e-12
-
+const double kInf = HUGE_VAL;
+const double kTau = 1e-12;
 const double kEpsilon = 1e-15;
 
 struct Node {

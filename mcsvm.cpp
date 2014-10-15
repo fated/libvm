@@ -594,15 +594,6 @@ class Spoc {
  public:
   Spoc() {};
   virtual ~Spoc() {};
-
-  struct SolutionInfo {
-    double obj;
-    double rho;
-    double upper_bound_p;
-    double upper_bound_n;
-    double r;  // for Solver_NU
-  };
-
   void Solve();
 
  protected:
@@ -647,7 +638,7 @@ Spoc::Spoc(MCSVMParameter &param) {
    req_n_blocks_lrucache, spoc_pd.cache_size);
   n_blocks_lrucache = cachelru_construct(m, req_n_blocks_lrucache, sizeof(double)*m);
 
-  spoc_initialize();
+  Initialize();
 
   printf("Initializing ... done\n"); fflush(stdout);
 }
@@ -656,7 +647,7 @@ Spoc::~Spoc() {
 
 }
 
-void Spoc::spoc_initialize() {
+void Spoc::Initialize() {
 
   long i;
   long s,r;
@@ -695,10 +686,10 @@ void Spoc::spoc_initialize() {
   for (i=1; i<m; i++)
     zero_pattern_list[i-1] =i;
   n_zero_pattern = m-1;
-  choose_next_pattern(supp_pattern_list, n_supp_pattern);
+  ChooseNextPattern(supp_pattern_list, n_supp_pattern);
 }
 
-long Spoc::spoc_epsilon(double epsilon) {
+long Spoc::Solve(double epsilon) {
 
   long supp_only =1;
   long cont = 1;
@@ -710,9 +701,9 @@ long Spoc::spoc_epsilon(double epsilon) {
   while (cont) {
     max_psi = 0;
     if (supp_only)
-      choose_next_pattern(supp_pattern_list, n_supp_pattern);
+      ChooseNextPattern(supp_pattern_list, n_supp_pattern);
     else
-      choose_next_pattern(zero_pattern_list, n_zero_pattern);
+      ChooseNextPattern(zero_pattern_list, n_zero_pattern);
 
     if (max_psi > epsilon * beta) {
       redopt_def.a = vector_a[next_p];
@@ -733,7 +724,7 @@ long Spoc::spoc_epsilon(double epsilon) {
           kernel_next_p[i] = kernel_function(x[i], x[next_p]);
       }
 
-      update_matrix_f(kernel_next_p);
+      UpdateMatrix(kernel_next_p);
 
       if (supp_only) {
         for (r=0; r<k; r++)
@@ -758,26 +749,24 @@ long Spoc::spoc_epsilon(double epsilon) {
   return (1);
 }
 
-double Spoc::next_epsilon1(double epsilon_cur, double epsilon) {
-
+double Spoc::NextEpsilon1(double epsilon_cur, double epsilon) {
   double e;
-  e= epsilon_cur; /* just for the compiler */
-  e=  ((max_psi / beta) * .95);
+  e = epsilon_cur; /* just for the compiler */
+  e = ((max_psi / beta) * .95);
 
-  return (MAX(e, epsilon));
+  return (std::max(e, epsilon));
 }
 
-double Spoc::next_epsilon2(double epsilon_cur, double epsilon) {
-  static double iteration =12;
+double Spoc::NextEpsilon2(double epsilon_cur, double epsilon) {
+  static double iteration = 12;
   double e = epsilon_cur / log10(iteration);
 
   iteration+=2;
 
-  return (MAX( e , epsilon));
+  return (std::max(e , epsilon));
 }
 
-void Spoc::choose_next_pattern(long *pattern_list, long n_pattern) {
-
+void Spoc::ChooseNextPattern(long *pattern_list, long n_pattern) {
   double psi;    /* KKT value of example */
   double psi1;   /* max_r matrix_f[i][r] */
   double psi0;   /* min_{r, tau[i][r]<delta[yi][r]}  matrix_f[i][r] */
@@ -796,11 +785,11 @@ void Spoc::choose_next_pattern(long *pattern_list, long n_pattern) {
 
     for (r=0; r<k; r++, matrix_f_ptr++) {
       if (*matrix_f_ptr > psi1)
-  psi1 = *matrix_f_ptr;
+        psi1 = *matrix_f_ptr;
 
       if (*matrix_f_ptr < psi0)
-  if (tau[p][r] < matrix_eye[y[p]][r])
-    psi0 = *matrix_f_ptr;
+        if (tau[p][r] < matrix_eye[y[p]][r])
+          psi0 = *matrix_f_ptr;
     }
 
     psi = psi1 - psi0;
@@ -814,51 +803,52 @@ void Spoc::choose_next_pattern(long *pattern_list, long n_pattern) {
   row_matrix_f_next_p = matrix_f[p];
 }
 
-
-void Spoc::update_matrix_f(double *kernel_next_p) {
-
+void Spoc::UpdateMatrix(double *kernel_next_p) {
   long i;
   long r;
 
   double *delta_tau_ptr = delta_tau;
   double *kernel_next_p_ptr;
 
-  for (r=0; r<k; r++, delta_tau_ptr++)
+  for (r = 0; r < k; r++, delta_tau_ptr++)
     if (*delta_tau_ptr != 0)
       for (i=0, kernel_next_p_ptr = kernel_next_p ; i<m; i++, kernel_next_p_ptr++)
-  matrix_f[i][r] += (*delta_tau_ptr) * (*kernel_next_p_ptr);
+        matrix_f[i][r] += (*delta_tau_ptr) * (*kernel_next_p_ptr);
 }
 
-double Spoc::get_train_error(double b) {
-  long i, r;
+double Spoc::CalcTrainError() {
+  int r;
   double max;
-  double errors = 0;
-  for (i=0; i<m; i++) {
+  int errors = 0;
+  for (int i = 0; i < m; ++i) {
     max = -DBL_MAX;
-    for (r=0; r<y[i]; r++) {
-      if (matrix_f[i][r]>max) {
-  max = matrix_f[i][r];
+    for (r = 0; r < y[i]; ++r) {
+      if (matrix_f[i][r] > max) {
+        max = matrix_f[i][r];
       }
     }
-    for (r++; r<k; r++) {
-      if (matrix_f[i][r]>max) {
-  max = matrix_f[i][r];
+    for (++r; r < k; ++r) {
+      if (matrix_f[i][r] > max) {
+        max = matrix_f[i][r];
       }
     }
-    if ((max-b) >= matrix_f[i][y[i]])
-      errors += 1;
+    if ((max-b) >= matrix_f[i][y[i]]) {
+      ++errors;
+    }
   }
-  return (100*errors/((double)m));
+
+  return (100*errors/(static_cast<double>(m)));
 }
 
-long Spoc::get_no_supp1() {
-  long n =0;
-  long i;
+int Spoc::CountNumSVs() {
+  int n = 0;
 
-  for (i=0; i<m; i++)
-    if (tau[i][y[i]] == 1)
+  for (int i = 0; i < m; ++i)
+    if (tau[i][y[i]] == 1) {
       n++;
-  return (n);
+    }
+
+  return n;
 }
 
 
@@ -910,10 +900,10 @@ MCSVMModel *TrainMCSVM(const struct Problem *prob, const struct MCSVMParameter *
 
     for (i=0; i<n_supp_pattern; i++)
       for (r=0; r<k; r++)
-  tau[i][r] = tau[supp_pattern_list[i]][r];
+        tau[i][r] = tau[supp_pattern_list[i]][r];
     for (i=n_supp_pattern; i<m; i++)
       for (r=0; r<k; r++)
-  tau[i][r]=0;
+        tau[i][r]=0;
 
   }
   mc_sol.size              = m;

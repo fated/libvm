@@ -116,12 +116,21 @@ Problem *ReadProblem(const char *file_name) {
 }
 
 void FreeProblem(struct Problem *problem) {
-  delete[] problem->y;
-  for (int i = 0; i < problem->num_ex; ++i) {
-    delete[] problem->x[i];
+  if (problem->y != NULL) {
+    delete[] problem->y;
   }
-  delete[] problem->x;
-  delete problem;
+
+  for (int i = 0; i < problem->num_ex; ++i) {
+    if (problem->x[i] != NULL) {
+      delete[] problem->x[i];
+    }
+  }
+  if (problem->x != NULL) {
+    delete[] problem->x;
+  }
+  if (problem != NULL) {
+    delete problem;
+  }
 
   return;
 }

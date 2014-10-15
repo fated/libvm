@@ -24,16 +24,11 @@ struct MCSVMModel {
   struct MCSVMParameter param;
   int num_ex;
   int num_classes;  // number of classes (k)
-  int total_sv;  // total #SV
-  struct Node **svs;  // SVs (SV[total_sv])
-  double **sv_coef;  // coefficients for SVs in decision functions (sv_coef[k-1][total_sv])
-  double *rho;  // constants in decision functions (rho[k*(k-1)/2])
-  int *sv_indices;  // sv_indices[0,...,nSV-1] are values in [1,...,num_traning_data] to indicate SVs in the training set
-  int *labels;  // label of each class (label[k])
-  int *num_svs;  // number of SVs for each class (nSV[k])
-                 // nSV[0] + nSV[1] + ... + nSV[k-1] = total_sv
-  int free_sv;  // 1 if SVMModel is created by LoadSVMModel
-                // 0 if SVMModel is created by TrainSVM
+  int n_supp_pattern;
+  int is_voted;
+  int *supp_pattern_list;
+  int *votes_weight;
+  double **tau;
 };
 
 MCSVMModel *TrainMCSVM(const struct Problem *prob, const struct MCSVMParameter *param);

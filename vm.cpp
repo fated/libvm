@@ -184,9 +184,10 @@ Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
     }
 
     for (int i = 0; i < num_ex; ++i) {
-      double *decision_values = NULL;
+      double *decision_values = new double[num_classes*(num_classes-1)/2];
       int label = 0;
-      double predict_label = PredictDecisionValues(model->svm_model, train->x[i], &decision_values);
+      double predict_label = PredictSVMValues(model->svm_model, train->x[i], decision_values);
+
       for (int j = 0; j < num_classes; ++j) {
         if (predict_label == model->svm_model->labels[j]) {
           label = j;
@@ -272,7 +273,7 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
       dist_neighbors[num_ex] = new double[num_neighbors];
       label_neighbors[num_ex] = new int[num_neighbors];
       for (int j = 0; j < num_neighbors; ++j) {
-        dist_neighbors[num_ex][j] = INF;
+        dist_neighbors[num_ex][j] = kInf;
         label_neighbors[num_ex][j] = -1;
       }
       categories[num_ex] = -1;
@@ -327,9 +328,9 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
       }
       categories[num_ex] = -1;
 
-      double *decision_values = NULL;
+      double *decision_values = new double[num_classes*(num_classes-1)/2];
       int label = 0;
-      double predict_label = PredictDecisionValues(model->svm_model, x, &decision_values);
+      double predict_label = PredictSVMValues(model->svm_model, x, decision_values);
       for (int j = 0; j < num_classes; ++j) {
         if (predict_label == labels[j]) {
           label = j;
@@ -582,7 +583,7 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
       dist_neighbors[i] = new double[num_neighbors];
       label_neighbors[i] = new int[num_neighbors];
       for (int j = 0; j < num_neighbors; ++j) {
-        dist_neighbors[i][j] = INF;
+        dist_neighbors[i][j] = kInf;
         label_neighbors[i][j] = -1;
       }
       categories[i] = -1;
@@ -617,7 +618,7 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
         dist_neighbors_[i] = new double[num_neighbors];
         label_neighbors_[i] = new int[num_neighbors];
         for (int j = 0; j < num_neighbors; ++j) {
-          dist_neighbors_[i][j] = INF;
+          dist_neighbors_[i][j] = kInf;
           label_neighbors_[i][j] = -1;
         }
 

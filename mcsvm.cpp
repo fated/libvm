@@ -334,11 +334,30 @@ double Kernel::KernelFunction(const Node *x, const Node *y, const SVMParameter &
 
 class RedOpt {
  public:
-  RedOpt(int num_classes, int redopt_type);
+  RedOpt(int num_classes, MCSVMParameter *param);
   virtual ~RedOpt();
+  void set_a(double a) {
+    a_ = a;
+  }
+  double get_a() {
+    return a_;
+  }
+  void set_y(double y) {
+    y_ = y;
+  }
+  int get_y() {
+    return y_;
+  }
+  void set_b(double b, int r) {
+    b_[r] = b;
+  }
+  double get_b(int r) {
+    return b_[r];
+  }
 
  protected:
   double (RedOpt::*redopt_function)();
+  int GetMarginError(const double beta);
 
  private:
   int num_classes_;
@@ -361,12 +380,12 @@ class RedOpt {
   int RedOptExact();
   int RedOptApprox();
   int RedOptAnalyticBinary();
-  int GetMarginError(const double beta);
 };
 
-RedOpt::RedOpt(int num_classes, int redopt_type)
+RedOpt::RedOpt(int num_classes, MCSVMParameter *param)
     :num_classes_(num_classes),
-     redopt_type_(redopt_type) {
+     redopt_type_(param->redopt_type)
+     delta_(param->delta) {
   switch (redopt_type) {
     case EXACT: {
       redopt_function = &RedOpt::RedOptExact;
@@ -374,6 +393,7 @@ RedOpt::RedOpt(int num_classes, int redopt_type)
     }
     case APPROX: {
       redopt_function = &RedOpt::RedOptApprox;
+      Info("Delta %e\n", delta_);
       break;
     }
     case BINARY: {
@@ -385,6 +405,7 @@ RedOpt::RedOpt(int num_classes, int redopt_type)
       break;
     }
   }
+  b_ = new double[num_classes_];
   vector_d_ = new Node[num_classes_];
 }
 
@@ -392,9 +413,8 @@ RedOpt::~RedOpt() {
   delete[] vector_d_;
 }
 
-/* solve reduced exactly, use sort */
+// solve reduced exactly, use sort
 int RedOpt::RedOptExact() {
-
   double phi0 = 0;  // potenial functions phi(t)
   double phi1;  // potenial functions phi(t+1)
   double sum_d = 0;
@@ -595,327 +615,430 @@ class Spoc {
   Spoc() {};
   virtual ~Spoc() {};
   void Solve();
+  double get_max_psi() {
+    return max_psi_;
+  }
+  double get_beta() {
+    return beta_;
+  }
 
  protected:
+  RedOpt red_opt_;
 
  private:
+  static int iteration_ = 12;
+  int num_ex_;
+  int num_classes_;
   int cache_size_;
-  double beta;
-  double epsilon;
-  double epsilon0;
-  double delta;
+  int num_support_pattern_;
+  int num_zero_pattern_;
+  int next_p_;
+  int next_p_list_;
+  int *support_pattern_list;
+  int *zero_pattern_list;
+  int **matrix_eye_;
+  double max_psi_;
+  double *row_matrix_f_next_p_;
+  double *vector_a_;
+  double *vector_b_;
+  double beta_;
+  double epsilon_;
+  double epsilon0_;
+  double delta_;
+  double *delta_tau_;
+  double *old_tau_;
+  double **matrix_f_;
+  double **tau_;
+  SPOC_Q spoc_Q_;
 };
 
-Spoc::Spoc(MCSVMParameter &param) {
+Spoc::Spoc(Problem *prob, MCSVMParameter &param)
+    :beta_(param->beta)
+     num_ex_(prob->num_ex)
+     num_classes_(param->num_classes)
+     cache_size_(param->cache_size) {
   long req_n_blocks_lrucache;
   long n_blocks_lrucache;
 
   Info("\nOptimizer (SPOC)  (version 1.0)\n");
-  Info("Initializing ... start \n");
+  Info("Initializing ... start\n");
 
-  x = mc_datadef.x;
-  y = mc_datadef.y;
-  m = mc_datadef.m;
-  k = mc_datadef.k;
-  l = mc_datadef.l;
+  Info("Requested margin (beta) %e\n", beta_);
 
-  /* scale beta with m */
-  fflush(stdout);
-  beta = spoc_pd.beta;
-
-  printf("Requested margin (beta) %e\n", spoc_pd.beta);
   kernel_function = kernel_get_function(spoc_pd.kernel_def);
 
-  allocate_memory();
-  redopt_construct(k);
-  kernel_construct(l);
-
-  n_supp_pattern = 0;
-  n_zero_pattern = 0;
-
-  req_n_blocks_lrucache = MIN(m, ((long)(((double)spoc_pd.cache_size) / ((((double)sizeof(double)) * ((double)m)) / ((double)MB)))));
-  printf("Requesting %ld blocks of cache (External bound %ldMb)\n",
-   req_n_blocks_lrucache, spoc_pd.cache_size);
-  n_blocks_lrucache = cachelru_construct(m, req_n_blocks_lrucache, sizeof(double)*m);
-
-  Initialize();
-
-  printf("Initializing ... done\n"); fflush(stdout);
-}
-
-Spoc::~Spoc() {
-
-}
-
-void Spoc::Initialize() {
-
-  long i;
-  long s,r;
-
-  /* vector_a */
-  for (i=0; i<m; i++) {
-    vector_a[i] = kernel_function(x[i], x[i]);
+  // allocate memory start
+  // tau
+  tau_ = new double*[num_ex_];
+  *tau = new double[num_ex_ * num_classes_];
+  for (int i = 1; i < num_ex_; ++i) {
+    tau_[i] = tau_[i-1] + num_classes_;
   }
 
-  /* matrix_eye */
-  for (r=0; r<k; r++)
-    for (s=0; s<k; s++)
-      if (r != s)
-        matrix_eye[r][s] = 0;
-      else
-        matrix_eye[r][s] = 1;
+  // vector_a
+  vector_a_ = new double[num_ex_];
 
-  /* matrix_f */
-  for (i=0; i<m; i++) {
-    for (r=0; r<k; r++) {
-      if (y[i] != r)
-        matrix_f[i][r] = 0;
-      else
-        matrix_f[i][r] = -beta;
+  // matrix_f
+  matrix_f_ = new double*[num_ex_];
+  *matrix_f_ = new double[num_ex_ * num_classes_];
+  for (int i = 1; i < num_ex_; ++i)
+    matrix_f_[i] = matrix_f_[i-1] + num_classes_;
+
+  // matrix_eye
+  matrix_eye_ = new int*[num_classes_];
+  *matrix_eye_ = new int[num_classes_ * num_classes_];
+  for (int i = 1; i < num_classes_; ++i)
+    matrix_eye_[i] = matrix_eye_[i-1] + num_classes_;
+
+  // delta_tau
+  delta_tau_ = new double[num_classes_];
+
+  // old_tau
+  old_tau_ = new double[num_classes_];
+
+  // vector_b
+  vector_b_ = new double[num_classes_];
+
+  // supp_pattern_list
+  support_pattern_list_ = new int[num_ex_];
+
+  // zero_pattern_list
+  zero_pattern_list_ = new int[num_ex_];
+
+  // allocate memory end
+
+  RedOpt red_opt_ = new RedOpt(num_classes_, param);
+
+  num_support_pattern_ = 0;
+  num_zero_pattern_ = 0;
+
+  req_n_blocks_lrucache = std::min(m, ((long)(((double)cache_size_) / ((sizeof(double) * ((double)num_ex_)) / MB))));
+  Info("Requesting %ld blocks of cache (External bound %ldMb)\n", req_n_blocks_lrucache, cache_size_);
+  spoc_Q = new SPOC_Q(prob, param);
+
+  // initialize begins
+
+  // vector_a
+  double *QD = spoc_Q.get_QD();
+  for (int i = 0; i < num_ex_; ++i) {
+    vector_a_[i] = QD[i];
+  }
+
+  // matrix_eye
+  for (int r = 0; r < num_classes_; ++r) {
+    for (int s = 0; s < num_classes_; ++s) {
+      if (r != s) {
+        matrix_eye_[r][s] = 0;
+      } else {
+        matrix_eye_[r][s] = 1;
+      }
     }
   }
 
-  /* tau */
-  for (i=0; i<m; i++)
-    for (r=0 ;r<k; r++)
-      tau[i][r] = 0;
+  // matrix_f
+  for (int i = 0; i < num_ex_; ++i) {
+    for (int r = 0; r < num_classes_; ++r) {
+      if (y[i] != r) {
+        matrix_f_[i][r] = 0;
+      } else {
+        matrix_f_[i][r] = -beta_;
+      }
+    }
+  }
 
-  supp_pattern_list[0] =0;
-  n_supp_pattern =1;
+  // tau
+  for (int i = 0; i < num_ex_; ++i) {
+    for (int r = 0 ; r < num_classes_; ++r) {
+      tau_[i][r] = 0;
+    }
+  }
 
-  for (i=1; i<m; i++)
-    zero_pattern_list[i-1] =i;
-  n_zero_pattern = m-1;
-  ChooseNextPattern(supp_pattern_list, n_supp_pattern);
+  support_pattern_list_[0] = 0;
+  num_support_pattern_ = 1;
+
+  for (int i = 1; i < num_ex_; ++i) {
+    zero_pattern_list_[i-1] = i;
+  }
+  num_zero_pattern_ = num_ex_-1;
+  ChooseNextPattern(support_pattern_list_, num_support_pattern_);
+
+  // initialize ends
+
+  Info("Initializing ... done\n");
 }
 
-long Spoc::Solve(double epsilon) {
+Spoc::~Spoc() {
+  if (vector_a_ != NULL) {
+    delete[] vector_a_;
+  }
+  if (matrix_f_ != NULL) {
+    if (*matrix_f_ != NULL) {
+      delete[] *matrix_f_;
+    }
+    delete[] matrix_f_;
+  }
+  if (matrix_eye_ != NULL) {
+    if (matrix_eye_ != NULL) {
+      delete[] *matrix_eye_;
+    }
+    delete[] matrix_eye_;
+  }
+  if (delta_tau_ != NULL) {
+    delete[] delta_tau_;
+  }
+  if (old_tau_ != NULL) {
+    delete[] old_tau_;
+  }
+  if (vector_b_ != NULL) {
+    delete[] vector_b_;
+  }
+  if (zero_pattern_list_ != NULL) {
+    delete[] zero_pattern_list_;
+  }
+  if (support_pattern_list_ != NULL) {
+    delete[] support_pattern_list_;
+  }
+  if (tau_ != NULL) {
+    if (*tau_ != NULL) {
+      delete[] *tau_;
+    }
+    delete[] tau_;
+  }
+}
 
-  long supp_only =1;
-  long cont = 1;
-  long mistake_k;
+void Spoc::Solve(double epsilon) {
+  int supp_only =1;
+  int cont = 1;
+  int mistake_k;
   double *kernel_next_p;
-  long r;
-  long i;
 
   while (cont) {
-    max_psi = 0;
-    if (supp_only)
-      ChooseNextPattern(supp_pattern_list, n_supp_pattern);
-    else
-      ChooseNextPattern(zero_pattern_list, n_zero_pattern);
+    max_psi_ = 0;
+    if (supp_only) {
+      ChooseNextPattern(support_pattern_list_, num_support_pattern_);
+    } else {
+      ChooseNextPattern(zero_pattern_list_, num_zero_pattern_);
+    }
 
-    if (max_psi > epsilon * beta) {
-      redopt_def.a = vector_a[next_p];
-      for (r=0; r<k; r++)
-        redopt_def.b[r] = matrix_f[next_p][r] - redopt_def.a * tau[next_p][r];
-      redopt_def.y = y[next_p];
-      for (r=0; r<k; r++)
-        old_tau[r] = tau[next_p][r];
-      redopt_def.alpha = tau[next_p];
+    if (max_psi_ > epsilon * beta_) {
+      redopt_def.a = vector_a_[next_p_];
+      for (int r = 0; r < num_classes_; ++r) {
+        redopt_def.b[r] = matrix_f_[next_p_][r] - redopt_def.a * tau_[next_p_][r];
+      }
+      redopt_def.y = y[next_p_];
+      for (int r = 0; r < num_classes_; ++r) {
+        old_tau_[r] = tau_[next_p_][r];
+      }
+      redopt_def.alpha = tau_[next_p_];
 
-      mistake_k = (*redopt_fun)(&redopt_def);
+      mistake_k = red_opt_->*redopt_function();
 
-      for (r=0; r<k; r++)
-        delta_tau[r] = tau[next_p][r]- old_tau[r];
+      for (int r = 0; r < num_classes_; ++r) {
+        delta_tau_[r] = tau_[next_p_][r] - old_tau_[r];
+      }
 
       if (!cachelru_retrive(next_p, (void*)(&kernel_next_p))) {
-        for (i=0; i<m; i++)
-          kernel_next_p[i] = kernel_function(x[i], x[next_p]);
+        for (int i = 0; i < num_ex_; ++i)
+          kernel_next_p_[i] = spoc_Q->*kernel_function(i, next_p_);
       }
 
       UpdateMatrix(kernel_next_p);
 
       if (supp_only) {
-        for (r=0; r<k; r++)
-          if (tau[next_p][r] != 0) break;
+        int r;
+        for (r = 0; r < num_classes_; ++r) {
+          if (tau_[next_p_][r] != 0) {
+            break;
+          }
+        }
         if (r == k) {
-          zero_pattern_list[n_zero_pattern++] = next_p;
-          supp_pattern_list[next_p_list] = supp_pattern_list[--n_supp_pattern];
+          zero_pattern_list_[num_zero_pattern_++] = next_p_;
+          support_pattern_list_[next_p_list_] = support_pattern_list_[--num_support_pattern_];
         }
       } else {
-        supp_pattern_list[n_supp_pattern++] = next_p;
-        zero_pattern_list[next_p_list] = zero_pattern_list[--n_zero_pattern];
-        supp_only =1;
+        support_pattern_list_[num_support_pattern__++] = next_p_;
+        zero_pattern_list[next_p_list_] = zero_pattern_list_[--num_zero_pattern_];
+        supp_only = 1;
       }
     } else {
       if (supp_only)
-        supp_only =0;
+        supp_only = 0;
       else
-        cont =0;
+        cont = 0;
     }
   }
 
-  return (1);
+  return;
 }
 
-double Spoc::NextEpsilon1(double epsilon_cur, double epsilon) {
-  double e;
-  e = epsilon_cur; /* just for the compiler */
-  e = ((max_psi / beta) * .95);
+double Spoc::NextEpsilon(double epsilon_cur, double epsilon) {
+  double e = epsilon_cur / log10(iteration_);
+  iteration_ += 2;
 
   return (std::max(e, epsilon));
 }
 
-double Spoc::NextEpsilon2(double epsilon_cur, double epsilon) {
-  static double iteration = 12;
-  double e = epsilon_cur / log10(iteration);
-
-  iteration+=2;
-
-  return (std::max(e , epsilon));
-}
-
-void Spoc::ChooseNextPattern(long *pattern_list, long n_pattern) {
-  double psi;    /* KKT value of example */
-  double psi1;   /* max_r matrix_f[i][r] */
-  double psi0;   /* min_{r, tau[i][r]<delta[yi][r]}  matrix_f[i][r] */
-
-  long i;
-  long r;
-  long p=0;
-
+void Spoc::ChooseNextPattern(int *pattern_list, int num_patterns) {
+  // psi : KKT value of example
+  // psi1 : max_r matrix_f[i][r]
+  // psi0 : min_{r, tau[i][r]<delta[yi][r]}  matrix_f[i][r]
+  int p = 0;
   double *matrix_f_ptr;
-  for (i=0; i<n_pattern; i++) {
-    psi1 = -DBL_MAX;
-    psi0 =  DBL_MAX;
 
-    p=pattern_list[i];
-    matrix_f_ptr = matrix_f[p];
+  for (int i = 0; i < num_patterns; ++i) {
+    double psi1 = -DBL_MAX;
+    double psi0 = DBL_MAX;
 
-    for (r=0; r<k; r++, matrix_f_ptr++) {
+    p = pattern_list[i];
+    matrix_f_ptr = matrix_f_[p];
+
+    for (int r = 0; r < num_classes_; ++r, ++matrix_f_ptr) {
       if (*matrix_f_ptr > psi1)
         psi1 = *matrix_f_ptr;
 
       if (*matrix_f_ptr < psi0)
-        if (tau[p][r] < matrix_eye[y[p]][r])
+        if (tau_[p][r] < matrix_eye_[y[p]][r])
           psi0 = *matrix_f_ptr;
     }
 
-    psi = psi1 - psi0;
+    double psi = psi1 - psi0;
 
     if (psi > max_psi) {
-      next_p_list = i;
-      max_psi = psi;
+      next_p_list_ = i;
+      max_psi_ = psi;
     }
   }
-  next_p = pattern_list[next_p_list];
-  row_matrix_f_next_p = matrix_f[p];
+  next_p_ = pattern_list[next_p_list_];
+  row_matrix_f_next_p_ = matrix_f_[p];
 }
 
 void Spoc::UpdateMatrix(double *kernel_next_p) {
-  long i;
-  long r;
-
-  double *delta_tau_ptr = delta_tau;
+  double *delta_tau_ptr = delta_tau_;
   double *kernel_next_p_ptr;
 
-  for (r = 0; r < k; r++, delta_tau_ptr++)
-    if (*delta_tau_ptr != 0)
-      for (i=0, kernel_next_p_ptr = kernel_next_p ; i<m; i++, kernel_next_p_ptr++)
-        matrix_f[i][r] += (*delta_tau_ptr) * (*kernel_next_p_ptr);
+  for (int r = 0; r < k; ++r, ++delta_tau_ptr) {
+    if (*delta_tau_ptr != NULL) {
+      for (int i = 0, kernel_next_p_ptr = kernel_next_p; i < num_ex_; ++i, ++kernel_next_p_ptr) {
+        matrix_f_[i][r] += (*delta_tau_ptr) * (*kernel_next_p_ptr);
+      }
+    }
+  }
+
+  return;
 }
 
-double Spoc::CalcTrainError() {
-  int r;
-  double max;
+double Spoc::CalcTrainError(double beta) {
   int errors = 0;
-  for (int i = 0; i < m; ++i) {
-    max = -DBL_MAX;
-    for (r = 0; r < y[i]; ++r) {
-      if (matrix_f[i][r] > max) {
-        max = matrix_f[i][r];
+
+  for (int i = 0; i < num_ex_; ++i) {
+    int j;
+    double max = -DBL_MAX;
+    for (j = 0; j < y[i]; ++j) {
+      if (matrix_f_[i][j] > max) {
+        max = matrix_f_[i][j];
       }
     }
-    for (++r; r < k; ++r) {
-      if (matrix_f[i][r] > max) {
-        max = matrix_f[i][r];
+    for (++j; j < num_classes_; ++j) {
+      if (matrix_f_[i][j] > max) {
+        max = matrix_f_[i][j];
       }
     }
-    if ((max-b) >= matrix_f[i][y[i]]) {
+    if ((max-beta) >= matrix_f_[i][y[i]]) {
       ++errors;
     }
   }
 
-  return (100*errors/(static_cast<double>(m)));
+  return (100*errors/(static_cast<double>(num_ex_)));
 }
 
 int Spoc::CountNumSVs() {
   int n = 0;
 
-  for (int i = 0; i < m; ++i)
-    if (tau[i][y[i]] == 1) {
-      n++;
+  for (int i = 0; i < num_ex_; ++i)
+    if (tau_[i][y[i]] == 1) {
+      ++n;
     }
 
   return n;
 }
 
+void Spoc::PrintEpsilon(double epsilon) {
+  Info("%11.5e   %7ld   %10.3e   %7.2f%%      %7.2f%%\n",
+    epsilon, num_support_pattern_, max_psi_/beta_, red_opt_.GetMarginError(beta_), red_opt_.GetMarginError(0));
 
+  return;
+}
 
 // Spoc class end
 
+// Q class begin
+
+class SPOC_Q : public Kernel {
+ public:
+  SPOC_Q(const Problem &prob, const MCSVMParameter &param) : Kernel(prob.num_ex, prob.x, param) {
+    cache_ = new Cache(prob.num_ex, static_cast<long int>(param.cache_size*(1<<20)));
+    QD_ = new double[prob.num_ex];
+    for (int i = 0; i < prob.num_ex; ++i)
+      QD_[i] = (this->*kernel_function)(i, i);
+  }
+
+  double *get_QD() const {
+    return QD_;
+  }
+
+  ~SPOC_Q() {
+    delete[] cache_;
+    delete[] QD_;
+  }
+
+ private:
+  Cache *cache_;
+  double *QD_;  // Q matrix Diagonal
+};
+
+// Q class ends
+
 MCSVMModel *TrainMCSVM(const struct Problem *prob, const struct MCSVMParameter *param) {
   double epsilon_current = 1;
+  // group problem
+  Spoc s = new Spoc(prob, param);
 
-  printf("Epsilon decreasing from %e to %e\n", param->epsilon0, param->epsilon);
-  redopt_construct(k);
-  redopt_fun = redopt_get_function(param->redopt_type);
-  if (param->redopt_type == APPROX) {
-    std::cout << std::scientific << "Delta " << param->delta << std::defaultfloat << std::endl;
-  }
-
-  redopt_def.delta = param->delta;
-  redopt_def.b = (double*) ut_calloc(k, sizeof(double));
-
+  Info("Epsilon decreasing from %e to %e\n", param->epsilon0, param->epsilon);
   epsilon_current = param->epsilon0;
 
-  std::cout << "\n"
-            << "New Epsilon   No. SPS      Max Psi   Train Error   Margin Error\n"
-            << "-----------   -------      -------   -----------   ------------\n"
-            << std::endl;
+  Info("\nNew Epsilon   No. SPS      Max Psi   Train Error   Margin Error\n");
+  Info("-----------   -------      -------   -----------   ------------\n");
 
-  while (max_psi > param->epsilon * beta) {
-    std::cout << std::setw(11) << std::setprecision(5) << std::scientific << epsilon_current << "   "
-              << std::setw(7) << std::scientific << n_supp_pattern << "   "
-              << std::setw(10) << std::setprecision(3) << std::scientific << max_psi/beta << "   "
-              << std::setw(7) << std::setprecision(2) << std::fixed << get_train_error(beta) << "\%      "
-              << std::setw(7) << std::setprecision(2) << std::fixed << get_train_error(0) << '%'
-              << std::endl;
-    spoc_epsilon(epsilon_current);
-    epsilon_current = next_epsilon2(epsilon_current , param->epsilon);
+  while (s.get_max_psi() > param->epsilon * s.get_beta()) {
+    s.PrintEpsilon(epsilon_current);
+    s.Solve(epsilon_current);
+    epsilon_current = s.NextEpsilon(epsilon_current, param->epsilon);
   }
-  std::cout << std::setw(11) << std::setprecision(5) << std::scientific << param->epsilon << "   "
-            << std::setw(7) << std::scientific << n_supp_pattern << "   "
-            << std::setw(10) << std::setprecision(3) << std::scientific << max_psi/beta << "   "
-            << std::setw(7) << std::setprecision(2) << std::fixed << get_train_error(beta) << "\%      "
-            << std::setw(7) << std::setprecision(2) << std::fixed << get_train_error(0) << '%'
-            << std::endl;
-  free (redopt_def.b);
+  s.PrintEpsilon(param->epsilon);
 
-  {
-    long i,r;
+  qsort(support_pattern_list_, num_support_pattern_, sizeof(long), &longcmp);
 
-    qsort(supp_pattern_list, n_supp_pattern, sizeof(long), &longcmp);
-
-    for (i=0; i<n_supp_pattern; i++)
-      for (r=0; r<k; r++)
-        tau[i][r] = tau[supp_pattern_list[i]][r];
-    for (i=n_supp_pattern; i<m; i++)
-      for (r=0; r<k; r++)
-        tau[i][r]=0;
-
+  for (int i = 0; i < num_support_pattern_; ++i) {
+    for (int r = 0; r < num_classes_; ++r) {
+      tau_[i][r] = tau_[support_pattern_list_[i]][r];
+    }
   }
+  for (int i = num_support_pattern_; i < num_ex_; ++i) {
+    for (int r = 0; r < num_classes_; ++r) {
+      tau_[i][r] = 0;
+    }
+  }
+
   mc_sol.size              = m;
   mc_sol.k                 = k;
   mc_sol.l                 = l;
-  mc_sol.n_supp_pattern    = n_supp_pattern;
+  mc_sol.num_support_pattern_    = num_support_pattern_;
   mc_sol.is_voted          = 0;
-  mc_sol.supp_pattern_list = supp_pattern_list;
+  mc_sol.support_pattern_list_ = support_pattern_list_;
   mc_sol.votes_weight      = NULL;
   mc_sol.tau               = tau;
 
-  std::cout << "\nNo. support pattern " << n_supp_pattern << "( " << get_no_supp1() << " at bound )\n";
+  std::cout << "\nNo. support pattern " << num_support_pattern_ << "( " << get_no_supp1() << " at bound )\n";
 
   return (mc_sol);
 }

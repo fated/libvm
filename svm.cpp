@@ -1235,7 +1235,7 @@ static void SolveCSVC(const Problem *prob, const SVMParameter *param, double *al
   }
 
   Solver s;
-  s.Solve(num_ex, SVC_Q(*prob, *param,y), minus_ones, y, alpha, Cp, Cn, param->eps, si, param->shrinking);
+  s.Solve(num_ex, SVC_Q(*prob, *param, y), minus_ones, y, alpha, Cp, Cn, param->eps, si, param->shrinking);
 
   double sum_alpha=0;
   for (int i = 0; i < num_ex; ++i) {
@@ -1288,7 +1288,7 @@ static void SolveNuSVC(const Problem *prob, const SVMParameter *param, double *a
   }
 
   Solver_NU s;
-  s.Solve(num_ex, SVC_Q(*prob, *param,y), zeros, y, alpha, 1.0, 1.0, param->eps, si, param->shrinking);
+  s.Solve(num_ex, SVC_Q(*prob, *param, y), zeros, y, alpha, 1.0, 1.0, param->eps, si, param->shrinking);
   double r = si->r;
 
   Info("C = %f\n", 1/r);

@@ -1001,6 +1001,25 @@ class SPOC_Q : public Kernel {
 MCSVMModel *TrainMCSVM(const struct Problem *prob, const struct MCSVMParameter *param) {
   double epsilon_current = 1;
   // group problem
+  // classification
+  int num_ex = prob->num_ex;
+  int num_classes;
+  int *labels = NULL;
+  int *start = NULL;
+  int *count = NULL;
+  int *perm = new int[num_ex];
+
+  // group training data of the same class
+  GroupClasses(prob, &num_classes, &labels, &start, &count, perm);
+  if (num_classes == 1) {
+    Info("WARNING: training data in only one class. See README for details.\n");
+  }
+
+  Node **x = new Node*[num_ex];
+  for (int i = 0; i < num_ex; ++i) {
+    x[i] = prob->x[perm[i]];
+  }
+
   Spoc s = new Spoc(prob, param);
 
   Info("Epsilon decreasing from %e to %e\n", param->epsilon0, param->epsilon);

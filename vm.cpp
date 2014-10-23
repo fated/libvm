@@ -529,6 +529,13 @@ void CrossValidation(const struct Problem *prob, const struct Parameter *param,
 
     struct Model *submodel = TrainVM(&subprob, param);
 
+    if (param->probability == 1) {
+      for (int j = 0; j < submodel->num_classes; ++j) {
+        std::cout << submodel->labels[j] << "        ";
+      }
+      std::cout << '\n';
+    }
+
     for (int j = begin; j < end; ++j) {
       double *avg_prob = NULL;
       brier[perm[j]] = 0;
@@ -543,6 +550,12 @@ void CrossValidation(const struct Problem *prob, const struct Parameter *param,
         } else {
           brier[perm[j]] += avg_prob[k] * avg_prob[k];
         }
+      }
+      if (param->probability == 1) {
+        for (k = 0; k < submodel->num_classes; ++k) {
+          std::cout << avg_prob[k] << ' ';
+        }
+        std::cout << '\n';
       }
       delete[] avg_prob;
     }
@@ -707,6 +720,14 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
           brier[i] += avg_prob[j]*avg_prob[j];
         }
       }
+
+      if (param->probability == 1) {
+        for (int j = 0; j < num_classes; ++j) {
+          std::cout << avg_prob[j] << ' ';
+        }
+        std::cout << '\n';
+      }
+
       delete[] avg_prob;
 
       predict_labels[i] = labels[static_cast<std::size_t>(best)];
@@ -738,6 +759,12 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
         }
       }
 
+    }
+    if (param->probability == 1) {
+      for (std::size_t j = 0; j < num_classes; ++j) {
+        std::cout << labels[j] << "        ";
+      }
+      std::cout << '\n';
     }
 
     for (int i = 0; i < num_ex; ++i) {
@@ -779,6 +806,12 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
         } else {
           brier[i] += avg_prob[j] * avg_prob[j];
         }
+      }
+      if (param->probability == 1) {
+        for (int j = 0; j < submodel->num_classes; ++j) {
+          std::cout << avg_prob[j] << ' ';
+        }
+        std::cout << '\n';
       }
       FreeModel(submodel);
       delete[] avg_prob;

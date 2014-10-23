@@ -27,9 +27,10 @@ int main(int argc, char *argv[]) {
 
   prob = ReadProblem(data_file_name);
 
-  if (param.taxonomy_type == SVM_EL ||
-      param.taxonomy_type == SVM_ES ||
-      param.taxonomy_type == SVM_KM) {
+  if ((param.taxonomy_type == SVM_EL ||
+       param.taxonomy_type == SVM_ES ||
+       param.taxonomy_type == SVM_KM) &&
+      param.svm_param->gamma == 0) {
     param.svm_param->gamma = 1.0 / prob->max_index;
   }
 
@@ -99,6 +100,7 @@ void ExitWithHelp() {
             << "  -k num_neighbors : set number of neighbors in kNN (default 1)\n"
             << "  -c num_categories : set number of categories for Venn predictor (default 4)\n"
             << "  -v num_folds : set number of folders in cross validation (default 5)\n"
+            << "  -b probability estimates : whether to output probability estimates for all labels, 0 or 1 (default 0)\n"
             << "  -p : prefix of options to set parameters for SVM\n"
             << "    -ps svm_type : set type of SVM (default 0)\n"
             << "      0 -- C-SVC    (multi-class classification)\n"
@@ -129,6 +131,7 @@ void ParseCommandLine(int argc, char **argv, char *data_file_name, char *output_
   param.load_model = 0;
   param.num_categories = 4;
   param.num_folds = 5;
+  param.probability = 0;
   param.knn_param = new KNNParameter;
   param.svm_param = NULL;
   InitKNNParam(param.knn_param);
@@ -168,6 +171,11 @@ void ParseCommandLine(int argc, char **argv, char *data_file_name, char *output_
           std::cerr << "n-fold cross validation: n must >= 2" << std::endl;
           exit(EXIT_FAILURE);
         }
+        break;
+      }
+      case 'b': {
+        ++i;
+        param.probability = std::atoi(argv[i]);
         break;
       }
       case 'p': {

@@ -15,6 +15,7 @@ struct Parameter {
   int load_model;
   int taxonomy_type;
   int num_folds;
+  int probability;
 };
 
 struct Model {

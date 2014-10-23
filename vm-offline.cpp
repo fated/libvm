@@ -31,9 +31,10 @@ int main(int argc, char *argv[]) {
   train = ReadProblem(train_file_name);
   test = ReadProblem(test_file_name);
 
-  if (param.taxonomy_type == SVM_EL ||
-      param.taxonomy_type == SVM_ES ||
-      param.taxonomy_type == SVM_KM) {
+  if ((param.taxonomy_type == SVM_EL ||
+       param.taxonomy_type == SVM_ES ||
+       param.taxonomy_type == SVM_KM) &&
+      param.svm_param->gamma == 0) {
     param.svm_param->gamma = 1.0 / train->max_index;
   }
 
@@ -60,6 +61,14 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  if (param.probability == 1) {
+    output_file << "                      ";
+    for (int i = 0; i < model->num_classes; ++i) {
+      output_file << model->labels[i] << "        ";
+    }
+    output_file << '\n';
+  }
+
   for (int i = 0; i < test->num_ex; ++i) {
     double predict_label, lower_bound, upper_bound, logloss, brier = 0, *avg_prob = NULL;
 
@@ -74,17 +83,23 @@ int main(int argc, char *argv[]) {
         brier += avg_prob[j]*avg_prob[j];
       }
     }
-    delete[] avg_prob;
-
     avg_lower_bound += lower_bound;
     avg_upper_bound += upper_bound;
     avg_brier += brier;
     avg_logloss += logloss;
 
-    output_file << predict_label << ' ' << lower_bound << ' ' << upper_bound << '\n';
+    output_file << std::resetiosflags(std::ios::fixed) << test->y[i] << ' ' << predict_label << ' '
+                << std::setiosflags(std::ios::fixed) << lower_bound << ' ' << upper_bound;
+    if (param.probability == 1) {
+      for (int j = 0; j < model->num_classes; ++j) {
+        output_file << ' ' << avg_prob[j];
+      }
+    }
+    output_file << '\n';
     if (predict_label == test->y[i]) {
       ++num_correct;
     }
+    delete[] avg_prob;
   }
   avg_lower_bound /= test->num_ex;
   avg_upper_bound /= test->num_ex;
@@ -123,6 +138,7 @@ void ExitWithHelp() {
             << "  -c num_categories : set number of categories for Venn predictor (default 4)\n"
             << "  -s model_file_name : save model\n"
             << "  -l model_file_name : load model\n"
+            << "  -b probability estimates : whether to output probability estimates for all labels, 0 or 1 (default 0)\n"
             << "  -p : prefix of options to set parameters for SVM\n"
             << "    -ps svm_type : set type of SVM (default 0)\n"
             << "      0 -- C-SVC    (multi-class classification)\n"
@@ -152,6 +168,7 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
   param.save_model = 0;
   param.load_model = 0;
   param.num_categories = 4;
+  param.probability = 0;
   param.knn_param = new KNNParameter;
   param.svm_param = NULL;
   InitKNNParam(param.knn_param);
@@ -194,6 +211,11 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
         ++i;
         param.load_model = 1;
         std::strcpy(model_file_name, argv[i]);
+        break;
+      }
+      case 'b': {
+        ++i;
+        param.probability = std::atoi(argv[i]);
         break;
       }
       case 'p': {

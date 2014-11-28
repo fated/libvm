@@ -978,9 +978,9 @@ void FreeModel(struct Model *model) {
        model->param.taxonomy_type == SVM_ES ||
        model->param.taxonomy_type == SVM_KM) &&
       model->svm_model != NULL) {
-    FreeSVMModel(&(model->svm_model));
-    delete model->svm_model;
-    model->svm_model = NULL;
+    FreeSVMModel(model->svm_model);
+    // delete model->svm_model;
+    // model->svm_model = NULL;
   }
 
   if (model->labels != NULL) {
@@ -1034,8 +1034,9 @@ const char *CheckParameter(const struct Parameter *param) {
   if (param->taxonomy_type == KNN) {
     if (param->knn_param == NULL) {
       return "no knn parameter";
+    } else if (CheckKNNParameter(param->knn_param) != NULL) {
+      return CheckKNNParameter(param->knn_param);
     }
-    return CheckKNNParameter(param->knn_param);
   }
 
   if (param->taxonomy_type == SVM_EL ||
@@ -1043,8 +1044,9 @@ const char *CheckParameter(const struct Parameter *param) {
       param->taxonomy_type == SVM_KM) {
     if (param->svm_param == NULL) {
       return "no svm parameter";
+    } else if (CheckSVMParameter(param->svm_param) != NULL) {
+      return CheckSVMParameter(param->svm_param);
     }
-    return CheckSVMParameter(param->svm_param);
   }
 
   if (param->taxonomy_type > 3) {

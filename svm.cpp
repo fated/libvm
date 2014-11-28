@@ -1543,7 +1543,7 @@ SVMModel *LoadSVMModel(std::ifstream &model_file) {
       break;
     } else {
       std::cerr << "Unknown text in knn_model file: " << cmd << std::endl;
-      FreeSVMModel(&model);
+      FreeSVMModel(model);
       return NULL;
     }
   }
@@ -1551,54 +1551,44 @@ SVMModel *LoadSVMModel(std::ifstream &model_file) {
   return model;
 }
 
-void FreeSVMModelContent(SVMModel *model) {
-  if (model->free_sv && model->total_sv > 0 && model->svs != NULL) {
-    delete[] model->svs;
-    model->svs = NULL;
-  }
-
-  if (model->sv_coef) {
-    for (int i = 0; i < model->num_classes-1; ++i)
+void FreeSVMModel(SVMModel* model)
+{
+  if (model->sv_coef != NULL) {
+    for (int i = 0; i < model->num_classes-1; ++i) {
       delete[] model->sv_coef[i];
-  }
-
-  if (model->svs) {
-    delete[] model->svs;
-    model->svs = NULL;
-  }
-
-  if (model->sv_coef) {
+    }
     delete[] model->sv_coef;
     model->sv_coef = NULL;
   }
 
-  if (model->rho) {
+  if (model->svs != NULL) {
+    delete[] model->svs;
+    model->svs = NULL;
+  }
+
+  if (model->rho != NULL) {
     delete[] model->rho;
     model->rho = NULL;
   }
 
-  if (model->labels) {
+  if (model->labels != NULL) {
     delete[] model->labels;
     model->labels= NULL;
   }
 
-  if (model->sv_indices) {
+  if (model->sv_indices != NULL) {
     delete[] model->sv_indices;
     model->sv_indices = NULL;
   }
 
-  if (model->num_svs) {
+  if (model->num_svs != NULL) {
     delete[] model->num_svs;
     model->num_svs = NULL;
   }
-}
 
-void FreeSVMModel(SVMModel** model)
-{
-  if (model != NULL && *model != NULL) {
-    FreeSVMModelContent(*model);
-    delete *model;
-    *model = NULL;
+  if (model != NULL) {
+    delete model;
+    model = NULL;
   }
 
   return;
@@ -1624,24 +1614,16 @@ void FreeSVMParam(SVMParameter* param) {
 }
 
 const char *CheckSVMParameter(const SVMParameter *param) {
+  if (param->kernel_param == NULL) {
+    return "no kernle parameter";
+  } else if (CheckKernelParameter(param->kernel_param) != NULL) {
+    return CheckKernelParameter(param->kernel_param);
+  }
+
   int svm_type = param->svm_type;
   if (svm_type != C_SVC &&
       svm_type != NU_SVC)
     return "unknown svm type";
-
-  int kernel_type = param->kernel_param->kernel_type;
-  if (kernel_type != LINEAR &&
-      kernel_type != POLY &&
-      kernel_type != RBF &&
-      kernel_type != SIGMOID &&
-      kernel_type != PRECOMPUTED)
-    return "unknown kernel type";
-
-  if (param->kernel_param->gamma < 0)
-    return "gamma < 0";
-
-  if (param->kernel_param->degree < 0)
-    return "degree of polynomial kernel < 0";
 
   if (param->cache_size <= 0)
     return "cache_size <= 0";
@@ -1665,12 +1647,8 @@ const char *CheckSVMParameter(const SVMParameter *param) {
 }
 
 void InitSVMParam(struct SVMParameter *param) {
+  InitKernelParam(param->kernel_param);
   param->svm_type = C_SVC;
-  param->kernel_param = new KernelParameter;
-  param->kernel_param->kernel_type = RBF;
-  param->kernel_param->degree = 3;
-  param->kernel_param->gamma = 0;  // default 1/num_features
-  param->kernel_param->coef0 = 0;
   param->nu = 0.5;
   param->cache_size = 100;
   param->C = 1;

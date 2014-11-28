@@ -838,9 +838,6 @@ MCSVMModel *TrainMCSVM(const struct Problem *prob, const struct MCSVMParameter *
   model->num_ex = num_ex;
   model->num_classes = num_classes;
   model->labels = labels;
-  model->votes_weight = NULL;
-  model->probA = NULL;
-  model->probB = NULL;
 
   delete[] alter_labels;
 
@@ -902,15 +899,10 @@ static const char *kRedOptTypeTable[] = { "exact", "approx", "binary", NULL };
 
 static const char *kKernelTypeTable[] = { "linear", "polynomial", "rbf", "sigmoid", "precomputed", NULL };
 
-int SaveMCSVMModel(const char *file_name, const struct MCSVMModel *model) {
+int SaveMCSVMModel(std::ofstream &model_file, const struct MCSVMModel *model) {
   const MCSVMParameter &param = model->param;
 
-  std::ofstream model_file(file_name);
-  if (!model_file.is_open()) {
-    std::cerr << "Unable to open model file: " << file_name << std::endl;
-    return (-1);
-  }
-
+  model_file << "mcsvm_model\n";
   model_file << "redopt_type " << kRedOptTypeTable[param.redopt_type] << '\n';
   model_file << "kernel_type " << kKernelTypeTable[param.kernel_param->kernel_type] << '\n';
 
@@ -932,7 +924,6 @@ int SaveMCSVMModel(const char *file_name, const struct MCSVMModel *model) {
   model_file << "num_examples " << model->num_ex << '\n';
   model_file << "num_classes " << num_classes << '\n';
   model_file << "total_SV " << total_sv << '\n';
-  model_file << "probability " << param.probability << '\n';
 
   if (model->labels) {
     model_file << "labels";
@@ -952,20 +943,6 @@ int SaveMCSVMModel(const char *file_name, const struct MCSVMModel *model) {
     model_file << "SV_indices\n";
     for (int i = 0; i < total_sv; ++i)
       model_file << model->sv_indices[i] << ' ';
-    model_file << '\n';
-  }
-
-  if (model->probA) {
-    model_file << "probA\n";
-    for (int i = 0; i < num_classes; ++i)
-      model_file << model->probA[i] << ' ';
-    model_file << '\n';
-  }
-
-  if (model->probB) {
-    model_file << "probB\n";
-    for (int i = 0; i < num_classes; ++i)
-      model_file << model->probB[i] << ' ';
     model_file << '\n';
   }
 
@@ -989,29 +966,19 @@ int SaveMCSVMModel(const char *file_name, const struct MCSVMModel *model) {
     }
     model_file << '\n';
   }
-  model_file.close();
 
   return 0;
 }
 
-MCSVMModel *LoadMCSVMModel(const char *file_name) {
-  std::ifstream model_file(file_name);
-  if (!model_file.is_open()) {
-    std::cerr << "Unable to open model file: " << file_name << std::endl;
-    exit(EXIT_FAILURE);
-  }
-
+MCSVMModel *LoadMCSVMModel(std::ifstream &model_file) {
   MCSVMModel *model = new MCSVMModel;
   MCSVMParameter &param = model->param;
   param.kernel_param = new KernelParameter;
   model->sv_indices = NULL;
   model->labels = NULL;
-  model->votes_weight = NULL;
   model->num_svs = NULL;
   model->svs = NULL;
   model->tau = NULL;
-  model->probA = NULL;
-  model->probB = NULL;
 
   char cmd[80];
   while (1) {
@@ -1028,7 +995,6 @@ MCSVMModel *LoadMCSVMModel(const char *file_name) {
       }
       if (kRedOptTypeTable[i] == NULL) {
         std::cerr << "Unknown reduced optimization type.\n" << std::endl;
-        model_file.close();
         return NULL;
       }
     } else
@@ -1043,7 +1009,6 @@ MCSVMModel *LoadMCSVMModel(const char *file_name) {
       }
       if (kKernelTypeTable[i] == NULL) {
         std::cerr << "Unknown kernel function.\n" << std::endl;
-        model_file.close();
         return NULL;
       }
     } else
@@ -1065,9 +1030,6 @@ MCSVMModel *LoadMCSVMModel(const char *file_name) {
     if (std::strcmp(cmd, "total_SV") == 0) {
       model_file >> model->total_sv;
     } else
-    if (std::strcmp(cmd, "probability") == 0) {
-      model_file >> param.probability;
-    } else
     if (std::strcmp(cmd, "labels") == 0) {
       int n = model->num_classes;
       model->labels = new int[n];
@@ -1087,20 +1049,6 @@ MCSVMModel *LoadMCSVMModel(const char *file_name) {
       model->sv_indices = new int[n];
       for (int i = 0; i < n; ++i) {
         model_file >> model->sv_indices[i];
-      }
-    } else
-    if (std::strcmp(cmd, "probA") == 0) {
-      int n = model->num_classes;
-      model->probA = new double[n];
-      for (int i = 0; i < n; ++i) {
-        model_file >> model->probA[i];
-      }
-    } else
-    if (std::strcmp(cmd, "probB") == 0) {
-      int n = model->num_classes;
-      model->probB = new double[n];
-      for (int i = 0; i < n; ++i) {
-        model_file >> model->probB[i];
       }
     } else
     if (std::strcmp(cmd, "SVs") == 0) {
@@ -1143,7 +1091,6 @@ MCSVMModel *LoadMCSVMModel(const char *file_name) {
             std::cerr << "Error: " << e.what() << " in SV " << (i+1) << std::endl;
             FreeMCSVMModel(model);
             std::vector<std::string>(tokens).swap(tokens);
-            model_file.close();
             return NULL;
           }  // TODO try not to use exception
         }
@@ -1171,7 +1118,6 @@ MCSVMModel *LoadMCSVMModel(const char *file_name) {
             std::cerr << "Error: " << e.what() << " in SV " << (i+1) << std::endl;
             FreeMCSVMModel(model);
             std::vector<std::string>(tokens).swap(tokens);
-            model_file.close();
             return NULL;
           }
         }
@@ -1182,11 +1128,9 @@ MCSVMModel *LoadMCSVMModel(const char *file_name) {
     } else {
       std::cerr << "Unknown text in mcsvm_model file: " << cmd << std::endl;
       FreeMCSVMModel(model);
-      model_file.close();
       return NULL;
     }
   }
-  model_file.close();
 
   return model;
 }
@@ -1205,21 +1149,6 @@ void FreeMCSVMModel(struct MCSVMModel *model) {
     }
     delete[] model->tau;
     model->tau = NULL;
-  }
-
-  if (model->votes_weight != NULL) {
-    delete[] model->votes_weight;
-    model->votes_weight = NULL;
-  }
-
-  if (model->probA) {
-    delete[] model->probA;
-    model->probA = NULL;
-  }
-
-  if (model->probB) {
-    delete[] model->probB;
-    model->probB = NULL;
   }
 
   if (model->labels != NULL) {
@@ -1257,16 +1186,10 @@ void FreeMCSVMParam(struct MCSVMParameter *param) {
 }
 
 void InitMCSVMParam(struct MCSVMParameter *param) {
-  param->kernel_param = new KernelParameter;
+  InitKernelParam(param->kernel_param);
   param->redopt_type = EXACT;
   param->beta = 1e-4;
   param->cache_size = 100;
-
-  param->kernel_param->kernel_type = RBF;
-  param->kernel_param->degree = 1;
-  param->kernel_param->coef0 = 0;
-  param->kernel_param->gamma = 0;
-
   param->epsilon = 1e-3;
   param->epsilon0 = 1-1e-6;
   param->delta = 1e-4;
@@ -1275,8 +1198,10 @@ void InitMCSVMParam(struct MCSVMParameter *param) {
 }
 
 const char *CheckMCSVMParameter(const struct MCSVMParameter *param) {
-  if (param->save_model == 1 && param->load_model == 1) {
-    return "cannot save and load model at the same time";
+  if (param->kernel_param == NULL) {
+    return "no kernel parameter";
+  } else if (CheckKernelParameter(param->kernel_param) != NULL) {
+    return CheckKernelParameter(param->kernel_param);
   }
 
   int redopt_type = param->redopt_type;
@@ -1285,23 +1210,6 @@ const char *CheckMCSVMParameter(const struct MCSVMParameter *param) {
       redopt_type != BINARY) {
     return "unknown reduced optimization type";
   }
-
-  int kernel_type = param->kernel_param->kernel_type;
-  if (kernel_type != LINEAR &&
-      kernel_type != POLY &&
-      kernel_type != RBF &&
-      kernel_type != SIGMOID &&
-      kernel_type != PRECOMPUTED)
-    return "unknown kernel type";
-
-  if (param->kernel_param->gamma < 0)
-    return "gamma < 0";
-
-  if (param->kernel_param->degree < 0)
-    return "degree of polynomial kernel < 0";
-
-  if (param->num_folds < 2)
-    return "num of folds in cross validation must >= 2";
 
   if (param->cache_size <= 0)
     return "cache_size <= 0";

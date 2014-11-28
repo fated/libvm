@@ -41,7 +41,7 @@ double PredictSVM(const struct SVMModel *model, const struct Node *x);
 
 int SaveSVMModel(std::ofstream &model_file, const struct SVMModel *model);
 SVMModel *LoadSVMModel(std::ifstream &model_file);
-void FreeSVMModel(struct SVMModel **model);
+void FreeSVMModel(struct SVMModel *model);
 
 void FreeSVMParam(struct SVMParameter *param);
 void InitSVMParam(struct SVMParameter *param);

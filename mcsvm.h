@@ -9,10 +9,6 @@ enum { EXACT, APPROX, BINARY };  // redopt_type
 struct MCSVMParameter {
   struct KernelParameter *kernel_param;
   int redopt_type;  // reduced optimization type
-  int save_model;
-  int load_model;
-  int num_folds;
-  int probability;
   int cache_size; // in Mb
   double beta;
   double epsilon;
@@ -26,11 +22,8 @@ struct MCSVMModel {
   int num_classes;  // number of classes (k)
   int total_sv;
   int *labels;
-  int *votes_weight;
   int *num_svs;
   int *sv_indices;
-  double *probA;
-  double *probB;
   double **tau;
   struct Node **svs;
 };

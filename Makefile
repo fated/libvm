@@ -3,7 +3,7 @@ CFLAGS = -Wall -Wconversion -O3 -fPIC
 SHVER = 2
 OS = $(shell uname)
 
-all: vm-offline vm-online vm-cv
+all: vm-offline vm-online vm-cv mcsvm.o
 
 vm-offline: vm-offline.cpp utilities.o knn.o svm.o vm.o
 	$(CXX) $(CFLAGS) vm-offline.cpp utilities.o knn.o svm.o vm.o -o vm-offline -lm
@@ -22,6 +22,9 @@ knn.o: knn.cpp knn.h
 
 svm.o: svm.cpp svm.h
 	$(CXX) $(CFLAGS) -c svm.cpp
+
+mcsvm.o: mcsvm.cpp mcsvm.h
+	$(CXX) $(CFLAGS) -c mcsvm.cpp
 
 vm.o: vm.cpp vm.h
 	$(CXX) $(CFLAGS) -c vm.cpp

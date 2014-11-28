@@ -2,8 +2,10 @@
 #define LIBVM_VM_H_
 
 #include "utilities.h"
+#include "kernel.h"
 #include "knn.h"
 #include "svm.h"
+#include "mcsvm.h"
 
 enum { KNN, SVM_EL, SVM_ES, SVM_KM };
 

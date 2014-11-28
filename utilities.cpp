@@ -6,6 +6,32 @@
 #include <cmath>
 #include <exception>
 
+void (*PrintString) (const char *) = &PrintNull;
+
+void PrintCout(const char *s) {
+  std::cout << s;
+  std::cout.flush();
+}
+
+void PrintNull(const char *s) {}
+
+void Info(const char *format, ...) {
+  char buffer[BUFSIZ];
+  va_list ap;
+  va_start(ap, format);
+  vsprintf(buffer, format, ap);
+  va_end(ap);
+  (*PrintString)(buffer);
+}
+
+void SetPrintNull() {
+  PrintString = &PrintNull;
+}
+
+void SetPrintCout() {
+  PrintString = &PrintCout;
+}
+
 Problem *ReadProblem(const char *file_name) {
   std::ifstream input_file(file_name);
   if (!input_file.is_open()) {

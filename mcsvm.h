@@ -2,21 +2,18 @@
 #define LIBVM_MCSVM_H_
 
 #include "utilities.h"
+#include "kernel.h"
 
 enum { EXACT, APPROX, BINARY };  // redopt_type
-enum { LINEAR, POLY, RBF, SIGMOID, PRECOMPUTED };  // kernel_type
 
 struct MCSVMParameter {
+  struct KernelParameter *kernel_param;
   int redopt_type;  // reduced optimization type
-  int kernel_type;
   int save_model;
   int load_model;
   int num_folds;
   int probability;
   int cache_size; // in Mb
-  int degree;  // for poly
-  double gamma;  // for poly/rbf/sigmoid
-  double coef0;  // for poly/sigmoid
   double beta;
   double epsilon;
   double epsilon0;

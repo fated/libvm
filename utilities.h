@@ -5,6 +5,7 @@
 #include <vector>
 #include <map>
 #include <cmath>
+#include <cstdarg>
 
 const double kInf = HUGE_VAL;
 const double kTau = 1e-12;
@@ -21,6 +22,12 @@ struct Problem {
   double *y;
   struct Node **x;
 };
+
+void PrintCout(const char *s);
+void PrintNull(const char *s);
+void Info(const char *format, ...);
+void SetPrintNull();
+void SetPrintCout();
 
 template <typename T>
 T FindMostFrequent(T *array, int size) {

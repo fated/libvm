@@ -34,8 +34,8 @@ int main(int argc, char *argv[]) {
   if ((param.taxonomy_type == SVM_EL ||
        param.taxonomy_type == SVM_ES ||
        param.taxonomy_type == SVM_KM) &&
-      param.svm_param->gamma == 0) {
-    param.svm_param->gamma = 1.0 / train->max_index;
+      param.svm_param->kernel_param->gamma == 0) {
+    param.svm_param->kernel_param->gamma = 1.0 / train->max_index;
   }
 
   std::ofstream output_file(output_file_name);
@@ -228,22 +228,22 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
             }
             case 't': {
               ++i;
-              param.svm_param->kernel_type = std::atoi(argv[i]);
+              param.svm_param->kernel_param->kernel_type = std::atoi(argv[i]);
               break;
             }
             case 'd': {
               ++i;
-              param.svm_param->degree = std::atoi(argv[i]);
+              param.svm_param->kernel_param->degree = std::atoi(argv[i]);
               break;
             }
             case 'g': {
               ++i;
-              param.svm_param->gamma = std::atof(argv[i]);
+              param.svm_param->kernel_param->gamma = std::atof(argv[i]);
               break;
             }
             case 'r': {
               ++i;
-              param.svm_param->coef0 = std::atof(argv[i]);
+              param.svm_param->kernel_param->coef0 = std::atof(argv[i]);
               break;
             }
             case 'n': {

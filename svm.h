@@ -2,16 +2,13 @@
 #define LIBVM_SVM_H_
 
 #include "utilities.h"
+#include "kernel.h"
 
 enum { C_SVC, NU_SVC };  // svm_type
-enum { LINEAR, POLY, RBF, SIGMOID, PRECOMPUTED };  // kernel_type
 
 struct SVMParameter {
+  struct KernelParameter *kernel_param;
   int svm_type;
-  int kernel_type;
-  int degree;  // for poly
-  double gamma;  // for poly/rbf/sigmoid
-  double coef0;  // for poly/sigmoid
   double cache_size; // in MB
   double eps;  // stopping criteria
   double C;  // for C_SVC
@@ -49,8 +46,5 @@ void FreeSVMModel(struct SVMModel **model);
 void FreeSVMParam(struct SVMParameter *param);
 void InitSVMParam(struct SVMParameter *param);
 const char *CheckSVMParameter(const struct SVMParameter *param);
-
-void SetPrintNull();
-void SetPrintCout();
 
 #endif  // LIBVM_SVM_H_

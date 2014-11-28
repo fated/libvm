@@ -96,7 +96,7 @@ KNNModel *TrainKNN(const struct Problem *prob, const struct KNNParameter *param)
     dist_neighbors[i] = new double[num_neighbors];
     label_neighbors[i] = new int[num_neighbors];
     for (int j = 0; j < num_neighbors; ++j) {
-      dist_neighbors[i][j] = INF;
+      dist_neighbors[i][j] = kInf;
       label_neighbors[i][j] = -1;
     }
   }
@@ -132,7 +132,7 @@ double PredictKNN(struct Problem *train, struct Node *x, const int num_neighbors
   double labels[num_neighbors];
 
   for (int i = 0; i < num_neighbors; ++i) {
-    neighbors[i] = INF;
+    neighbors[i] = kInf;
     labels[i] = -1;
   }
   for (int i = 0; i < train->num_ex; ++i) {

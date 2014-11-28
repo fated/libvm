@@ -7,34 +7,6 @@
 #include <cstdarg>
 #include <random>
 
-typedef double Qfloat;
-
-static void PrintCout(const char *s) {
-  std::cout << s;
-  std::cout.flush();
-}
-
-static void PrintNull(const char *s) {}
-
-static void (*PrintString) (const char *) = &PrintNull;
-
-static void Info(const char *format, ...) {
-  char buffer[BUFSIZ];
-  va_list ap;
-  va_start(ap, format);
-  vsprintf(buffer, format, ap);
-  va_end(ap);
-  (*PrintString)(buffer);
-}
-
-void SetPrintNull() {
-  PrintString = &PrintNull;
-}
-
-void SetPrintCout() {
-  PrintString = &PrintCout;
-}
-
 int CompareNodes(const void *n1, const void *n2) {
   if (((struct Node *)n1)->value > ((struct Node *)n2)->value)
     return (-1);
@@ -52,337 +24,6 @@ int CompareInt(const void *n1, const void *n2) {
   else
     return (0);
 }
-
-//
-// Kernel Cache
-//
-// l is the number of total data items
-// size is the cache size limit in bytes
-//
-class Cache {
- public:
-  Cache(int l, long int size);
-  ~Cache();
-
-  // request data [0,len)
-  // return some position p where [p,len) need to be filled
-  // (p >= len if nothing needs to be filled)
-  int get_data(const int index, Qfloat **data, int len);
-  void SwapIndex(int i, int j);
-
- private:
-  int l_;
-  long int size_;
-  struct Head {
-    Head *prev, *next;  // a circular list
-    Qfloat *data;
-    int len;  // data[0,len) is cached in this entry
-  };
-
-  Head *head_;
-  Head lru_head_;
-  void DeleteLRU(Head *h);
-  void InsertLRU(Head *h);
-};
-
-Cache::Cache(int l, long int size) : l_(l), size_(size) {
-  head_ = (Head *)calloc(static_cast<size_t>(l_), sizeof(Head));  // initialized to 0
-  size_ /= sizeof(Qfloat);
-  size_ -= static_cast<unsigned long>(l_) * sizeof(Head) / sizeof(Qfloat);
-  size_ = std::max(size_, 2 * static_cast<long int>(l_));  // cache must be large enough for two columns
-  lru_head_.next = lru_head_.prev = &lru_head_;
-}
-
-Cache::~Cache() {
-  for (Head *h = lru_head_.next; h != &lru_head_; h=h->next) {
-    delete[] h->data;
-  }
-  delete[] head_;
-}
-
-void Cache::DeleteLRU(Head *h) {
-  // delete from current location
-  h->prev->next = h->next;
-  h->next->prev = h->prev;
-}
-
-void Cache::InsertLRU(Head *h) {
-  // insert to last position
-  h->next = &lru_head_;
-  h->prev = lru_head_.prev;
-  h->prev->next = h;
-  h->next->prev = h;
-}
-
-int Cache::get_data(const int index, Qfloat **data, int len) {
-  Head *h = &head_[index];
-  if (h->len) {
-    DeleteLRU(h);
-  }
-  int more = len - h->len;
-
-  if (more > 0) {
-    // free old space
-    while (size_ < more) {
-      Head *old = lru_head_.next;
-      DeleteLRU(old);
-      delete[] old->data;
-      size_ += old->len;
-      old->data = 0;
-      old->len = 0;
-    }
-
-    // allocate new space
-    h->data = (Qfloat *)realloc(h->data, sizeof(Qfloat)*static_cast<unsigned long>(len));
-    size_ -= more;
-    std::swap(h->len, len);
-  }
-
-  InsertLRU(h);
-  *data = h->data;
-
-  return len;
-}
-
-void Cache::SwapIndex(int i, int j) {
-  if (i == j) {
-    return;
-  }
-
-  if (head_[i].len) {
-    DeleteLRU(&head_[i]);
-  }
-  if (head_[j].len) {
-    DeleteLRU(&head_[j]);
-  }
-  std::swap(head_[i].data, head_[j].data);
-  std::swap(head_[i].len, head_[j].len);
-  if (head_[i].len) {
-    InsertLRU(&head_[i]);
-  }
-  if (head_[j].len) {
-    InsertLRU(&head_[j]);
-  }
-
-  if (i > j) {
-    std::swap(i, j);
-  }
-  for (Head *h = lru_head_.next; h != &lru_head_; h = h->next) {
-    if (h->len > i) {
-      if (h->len > j) {
-        std::swap(h->data[i], h->data[j]);
-      } else {
-        // give up
-        DeleteLRU(h);
-        delete[] h->data;
-        size_ += h->len;
-        h->data = 0;
-        h->len = 0;
-      }
-    }
-  }
-}
-
-// Cache end
-
-//
-// Kernel evaluation
-//
-// the static method KernelFunction is for doing single kernel evaluation
-// the constructor of Kernel prepares to calculate the l*l kernel matrix
-// the member function get_Q is for getting one column from the Q Matrix
-//
-class QMatrix {
- public:
-  virtual Qfloat *get_Q(int column, int len) const = 0;
-  virtual double *get_QD() const = 0;
-  virtual void SwapIndex(int i, int j) const = 0;
-  virtual ~QMatrix() {}
-};
-
-static const char *kKernelTypeNameTable[] = {
-  "linear: u'*v (0)",
-  "polynomial: (gamma*u'*v + coef0)^degree (1)",
-  "radial basis function: exp(-gamma*|u-v|^2) (2)",
-  "sigmoid: tanh(gamma*u'*v + coef0) (3)",
-  "precomputed kernel (kernel values in training_set_file) (4)",
-  NULL
-};
-
-class Kernel : public QMatrix {
- public:
-  Kernel(int l, Node *const *x, const MCSVMParameter &param);
-  virtual ~Kernel();
-  static double KernelFunction(const Node *x, const Node *y, const MCSVMParameter &param);
-  virtual Qfloat *get_Q(int column, int len) const = 0;
-  virtual double *get_QD() const = 0;
-  virtual void SwapIndex(int i, int j) const {
-    std::swap(x_[i], x_[j]);
-    if (x_square_) {
-      std::swap(x_square_[i], x_square_[j]);
-    }
-  }
-
- protected:
-  double (Kernel::*kernel_function)(int i, int j) const;
-
- private:
-  const Node **x_;
-  double *x_square_;
-
-  // SVMParameter
-  const int kernel_type_;
-  const int degree_;
-  const double gamma_;
-  const double coef0_;
-
-  static double Dot(const Node *px, const Node *py);
-  double KernelLinear(int i, int j) const {
-    return Dot(x_[i], x_[j]);
-  }
-  double KernelPoly(int i, int j) const {
-    return std::pow(gamma_*Dot(x_[i], x_[j])+coef0_, degree_);
-  }
-  double KernelRBF(int i, int j) const {
-    return exp(-gamma_*(x_square_[i]+x_square_[j]-2*Dot(x_[i], x_[j])));
-  }
-  double KernelSigmoid(int i, int j) const {
-    return tanh(gamma_*Dot(x_[i], x_[j])+coef0_);
-  }
-  double KernelPrecomputed(int i, int j) const {
-    return x_[i][static_cast<int>(x_[j][0].value)].value;
-  }
-  void KernelText() {
-    Info("Kernel : %s \n( degree = %d, gamma = %.10f, coef0 = %.10f )\n",
-      kKernelTypeNameTable[kernel_type_], degree_, gamma_, coef0_);
-
-    return;
-  }
-};
-
-Kernel::Kernel(int l, Node *const *x, const MCSVMParameter &param)
-    :kernel_type_(param.kernel_type),
-     degree_(param.degree),
-     gamma_(param.gamma),
-     coef0_(param.coef0) {
-  switch (kernel_type_) {
-    case LINEAR: {
-      kernel_function = &Kernel::KernelLinear;
-      break;
-    }
-    case POLY: {
-      kernel_function = &Kernel::KernelPoly;
-      break;
-    }
-    case RBF: {
-      kernel_function = &Kernel::KernelRBF;
-      break;
-    }
-    case SIGMOID: {
-      kernel_function = &Kernel::KernelSigmoid;
-      break;
-    }
-    case PRECOMPUTED: {
-      kernel_function = &Kernel::KernelPrecomputed;
-      break;
-    }
-    default: {
-      // assert(false);
-      break;
-    }
-  }
-
-  clone(x_, x, l);
-
-  if (kernel_type_ == RBF) {
-    x_square_ = new double[l];
-    for (int i = 0; i < l; ++i) {
-      x_square_[i] = Dot(x_[i], x_[i]);
-    }
-  } else {
-    x_square_ = NULL;
-  }
-
-  KernelText();
-}
-
-Kernel::~Kernel() {
-  delete[] x_;
-  delete[] x_square_;
-}
-
-double Kernel::Dot(const Node *px, const Node *py) {
-  double sum = 0;
-  while (px->index != -1 && py->index != -1) {
-    if (px->index == py->index) {
-      sum += px->value * py->value;
-      ++px;
-      ++py;
-    } else {
-      if (px->index > py->index) {
-        ++py;
-      } else {
-        ++px;
-      }
-    }
-  }
-
-  return sum;
-}
-
-double Kernel::KernelFunction(const Node *x, const Node *y, const MCSVMParameter &param) {
-  switch (param.kernel_type) {
-    case LINEAR: {
-      return Dot(x, y);
-    }
-    case POLY: {
-      return std::pow(param.gamma*Dot(x, y)+param.coef0, param.degree);
-    }
-    case RBF: {
-      double sum = 0;
-      while (x->index != -1 && y->index != -1) {
-        if (x->index == y->index) {
-          double d = x->value - y->value;
-          sum += d*d;
-          ++x;
-          ++y;
-        } else {
-          if (x->index > y->index) {
-            sum += y->value * y->value;
-            ++y;
-          } else {
-            sum += x->value * x->value;
-            ++x;
-          }
-        }
-      }
-
-      while (x->index != -1) {
-        sum += x->value * x->value;
-        ++x;
-      }
-
-      while (y->index != -1) {
-        sum += y->value * y->value;
-        ++y;
-      }
-
-      return exp(-param.gamma*sum);
-    }
-    case SIGMOID: {
-      return tanh(param.gamma*Dot(x, y)+param.coef0);
-    }
-    case PRECOMPUTED: {  //x: test (validation), y: SV
-      return x[static_cast<int>(y->value)].value;
-    }
-    default: {
-      // assert(false);
-      return 0;  // Unreachable
-    }
-  }
-}
-
-// Kernel end
 
 // ReducedOptimization start
 
@@ -683,7 +324,7 @@ int RedOpt::GetMarginError(const double beta) {
 
 class SPOC_Q : public Kernel {
  public:
-  SPOC_Q(const Problem &prob, const MCSVMParameter &param) : Kernel(prob.num_ex, prob.x, param) {
+  SPOC_Q(const Problem &prob, const MCSVMParameter &param) : Kernel(prob.num_ex, prob.x, param.kernel_param) {
     cache_ = new Cache(prob.num_ex, static_cast<long>(param.cache_size*(1<<20)));
     QD_ = new double[prob.num_ex];
     for (int i = 0; i < prob.num_ex; ++i)
@@ -1214,7 +855,7 @@ double *PredictMCSVMValues(const struct MCSVMModel *model, const struct Node *x)
   double *kernel_values = new double[total_sv];
 
   for (int i = 0; i < total_sv; ++i) {
-    kernel_values[i] = Kernel::KernelFunction(x, model->svs[i], model->param);
+    kernel_values[i] = Kernel::KernelFunction(x, model->svs[i], model->param.kernel_param);
   }
 
   for (int i = 0; i < num_classes; ++i) {
@@ -1271,19 +912,19 @@ int SaveMCSVMModel(const char *file_name, const struct MCSVMModel *model) {
   }
 
   model_file << "redopt_type " << kRedOptTypeTable[param.redopt_type] << '\n';
-  model_file << "kernel_type " << kKernelTypeTable[param.kernel_type] << '\n';
+  model_file << "kernel_type " << kKernelTypeTable[param.kernel_param->kernel_type] << '\n';
 
-  if (param.kernel_type == POLY) {
-    model_file << "degree " << param.degree << '\n';
+  if (param.kernel_param->kernel_type == POLY) {
+    model_file << "degree " << param.kernel_param->degree << '\n';
   }
-  if (param.kernel_type == POLY ||
-      param.kernel_type == RBF  ||
-      param.kernel_type == SIGMOID) {
-    model_file << "gamma " << param.gamma << '\n';
+  if (param.kernel_param->kernel_type == POLY ||
+      param.kernel_param->kernel_type == RBF  ||
+      param.kernel_param->kernel_type == SIGMOID) {
+    model_file << "gamma " << param.kernel_param->gamma << '\n';
   }
-  if (param.kernel_type == POLY ||
-      param.kernel_type == SIGMOID) {
-    model_file << "coef0 " << param.coef0 << '\n';
+  if (param.kernel_param->kernel_type == POLY ||
+      param.kernel_param->kernel_type == SIGMOID) {
+    model_file << "coef0 " << param.kernel_param->coef0 << '\n';
   }
 
   int num_classes = model->num_classes;
@@ -1338,7 +979,7 @@ int SaveMCSVMModel(const char *file_name, const struct MCSVMModel *model) {
 
     const Node *p = svs[i];
 
-    if (param.kernel_type == PRECOMPUTED) {
+    if (param.kernel_param->kernel_type == PRECOMPUTED) {
       model_file << "0:" << static_cast<int>(p->value) << ' ';
     } else {
       while (p->index != -1) {
@@ -1362,6 +1003,7 @@ MCSVMModel *LoadMCSVMModel(const char *file_name) {
 
   MCSVMModel *model = new MCSVMModel;
   MCSVMParameter &param = model->param;
+  param.kernel_param = new KernelParameter;
   model->sv_indices = NULL;
   model->labels = NULL;
   model->votes_weight = NULL;
@@ -1395,7 +1037,7 @@ MCSVMModel *LoadMCSVMModel(const char *file_name) {
       int i;
       for (i = 0; kKernelTypeTable[i]; ++i) {
         if (std::strcmp(kKernelTypeTable[i], cmd) == 0) {
-          param.kernel_type = i;
+          param.kernel_param->kernel_type = i;
           break;
         }
       }
@@ -1406,13 +1048,13 @@ MCSVMModel *LoadMCSVMModel(const char *file_name) {
       }
     } else
     if (std::strcmp(cmd, "degree") == 0) {
-      model_file >> param.degree;
+      model_file >> param.kernel_param->degree;
     } else
     if (std::strcmp(cmd, "gamma") == 0) {
-      model_file >> param.gamma;
+      model_file >> param.kernel_param->gamma;
     } else
     if (std::strcmp(cmd, "coef0") == 0) {
-      model_file >> param.coef0;
+      model_file >> param.kernel_param->coef0;
     } else
     if (std::strcmp(cmd, "num_examples") == 0) {
       model_file >> model->num_ex;
@@ -1604,21 +1246,26 @@ void FreeMCSVMModel(struct MCSVMModel *model) {
 }
 
 void FreeMCSVMParam(struct MCSVMParameter *param) {
-  // delete param;
-  // param = NULL;
+  if (param->kernel_param != NULL) {
+    delete param->kernel_param;
+    param->kernel_param = NULL;
+  }
+  delete param;
+  param = NULL;
 
   return;
 }
 
 void InitMCSVMParam(struct MCSVMParameter *param) {
+  param->kernel_param = new KernelParameter;
   param->redopt_type = EXACT;
   param->beta = 1e-4;
   param->cache_size = 100;
 
-  param->kernel_type = RBF;
-  param->degree = 1;
-  param->coef0 = 0;
-  param->gamma = 0;
+  param->kernel_param->kernel_type = RBF;
+  param->kernel_param->degree = 1;
+  param->kernel_param->coef0 = 0;
+  param->kernel_param->gamma = 0;
 
   param->epsilon = 1e-3;
   param->epsilon0 = 1-1e-6;
@@ -1639,7 +1286,7 @@ const char *CheckMCSVMParameter(const struct MCSVMParameter *param) {
     return "unknown reduced optimization type";
   }
 
-  int kernel_type = param->kernel_type;
+  int kernel_type = param->kernel_param->kernel_type;
   if (kernel_type != LINEAR &&
       kernel_type != POLY &&
       kernel_type != RBF &&
@@ -1647,10 +1294,10 @@ const char *CheckMCSVMParameter(const struct MCSVMParameter *param) {
       kernel_type != PRECOMPUTED)
     return "unknown kernel type";
 
-  if (param->gamma < 0)
+  if (param->kernel_param->gamma < 0)
     return "gamma < 0";
 
-  if (param->degree < 0)
+  if (param->kernel_param->degree < 0)
     return "degree of polynomial kernel < 0";
 
   if (param->num_folds < 2)

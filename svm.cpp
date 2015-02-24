@@ -1615,7 +1615,7 @@ void FreeSVMParam(SVMParameter* param) {
 
 const char *CheckSVMParameter(const SVMParameter *param) {
   if (param->kernel_param == NULL) {
-    return "no kernle parameter";
+    return "no kernel parameter";
   } else if (CheckKernelParameter(param->kernel_param) != NULL) {
     return CheckKernelParameter(param->kernel_param);
   }
@@ -1647,6 +1647,7 @@ const char *CheckSVMParameter(const SVMParameter *param) {
 }
 
 void InitSVMParam(struct SVMParameter *param) {
+  param->kernel_param = new KernelParameter;
   InitKernelParam(param->kernel_param);
   param->svm_type = C_SVC;
   param->nu = 0.5;

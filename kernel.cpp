@@ -247,7 +247,6 @@ void Kernel::KernelText() {
 }
 
 void InitKernelParam(struct KernelParameter *param) {
-  param = new KernelParameter;
   param->kernel_type = RBF;
   param->degree = 3;
   param->gamma = 0;  // default 1/num_features

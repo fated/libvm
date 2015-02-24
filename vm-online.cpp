@@ -159,7 +159,9 @@ void ParseCommandLine(int argc, char **argv, char *data_file_name, char *output_
       }
       case 'k': {
         ++i;
-        param.knn_param->num_neighbors = std::atoi(argv[i]);
+        if (param.knn_param != NULL) {
+          param.knn_param->num_neighbors = std::atoi(argv[i]);
+        }
         break;
       }
       case 'c': {
@@ -177,52 +179,72 @@ void ParseCommandLine(int argc, char **argv, char *data_file_name, char *output_
           switch (argv[i][2]) {
             case 's': {
               ++i;
-              param.svm_param->svm_type = std::atoi(argv[i]);
+              if (param.svm_param != NULL) {
+                param.svm_param->svm_type = std::atoi(argv[i]);
+              }
               break;
             }
             case 't': {
               ++i;
-              param.svm_param->kernel_param->kernel_type = std::atoi(argv[i]);
+              if (param.svm_param != NULL) {
+                param.svm_param->kernel_param->kernel_type = std::atoi(argv[i]);
+              }
               break;
             }
             case 'd': {
               ++i;
-              param.svm_param->kernel_param->degree = std::atoi(argv[i]);
+              if (param.svm_param != NULL) {
+                param.svm_param->kernel_param->degree = std::atoi(argv[i]);
+              }
               break;
             }
             case 'g': {
               ++i;
-              param.svm_param->kernel_param->gamma = std::atof(argv[i]);
+              if (param.svm_param != NULL) {
+                param.svm_param->kernel_param->gamma = std::atof(argv[i]);
+              }
               break;
             }
             case 'r': {
               ++i;
-              param.svm_param->kernel_param->coef0 = std::atof(argv[i]);
+              if (param.svm_param != NULL) {
+                param.svm_param->kernel_param->coef0 = std::atof(argv[i]);
+              }
               break;
             }
             case 'n': {
               ++i;
-              param.svm_param->nu = std::atof(argv[i]);
+              if (param.svm_param != NULL) {
+                param.svm_param->nu = std::atof(argv[i]);
+              }
               break;
             }
             case 'm': {
               ++i;
-              param.svm_param->cache_size = std::atof(argv[i]);
+              if (param.svm_param != NULL) {
+                param.svm_param->cache_size = std::atof(argv[i]);
+              }
               break;
             }
             case 'c': {
               ++i;
-              param.svm_param->C = std::atof(argv[i]);
+              if (param.svm_param != NULL) {
+                param.svm_param->C = std::atof(argv[i]);
+              }
               break;
             }
             case 'e': {
               ++i;
-              param.svm_param->eps = std::atof(argv[i]);
+              if (param.svm_param != NULL) {
+                param.svm_param->eps = std::atof(argv[i]);
+              }
               break;
             }
             case 'h': {
               ++i;
-              param.svm_param->shrinking = std::atoi(argv[i]);
+              if (param.svm_param != NULL) {
+                param.svm_param->shrinking = std::atoi(argv[i]);
+              }
               break;
             }
             case 'q': {

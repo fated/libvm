@@ -895,6 +895,22 @@ int PredictMCSVM(const struct MCSVMModel *model, const struct Node *x, int *num_
   return model->labels[predicted_label];
 }
 
+double PredictMCSVMMaxValue(const struct MCSVMModel *model, const struct Node *x) {
+  int num_classes = model->num_classes;
+  double max_sim_score = -DBL_MAX;
+
+  double *sim_scores = PredictMCSVMValues(model, x);
+
+  for (int i = 0; i < num_classes; ++i) {
+    if (sim_scores[i] > max_sim_score) {
+      max_sim_score = sim_scores[i];
+    }
+  }
+
+  delete[] sim_scores;
+  return max_sim_score;
+}
+
 static const char *kRedOptTypeTable[] = { "exact", "approx", "binary", NULL };
 
 static const char *kKernelTypeTable[] = { "linear", "polynomial", "rbf", "sigmoid", "precomputed", NULL };
@@ -1186,6 +1202,7 @@ void FreeMCSVMParam(struct MCSVMParameter *param) {
 }
 
 void InitMCSVMParam(struct MCSVMParameter *param) {
+  param->kernel_param = new KernelParameter;
   InitKernelParam(param->kernel_param);
   param->redopt_type = EXACT;
   param->beta = 1e-4;

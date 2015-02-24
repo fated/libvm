@@ -7,11 +7,12 @@
 #include "svm.h"
 #include "mcsvm.h"
 
-enum { KNN, SVM_EL, SVM_ES, SVM_KM };
+enum { KNN, SVM_EL, SVM_ES, SVM_KM, MCSVM_EL};
 
 struct Parameter {
   struct KNNParameter *knn_param;
   struct SVMParameter *svm_param;
+  struct MCSVMParameter *mcsvm_param;
   int num_categories;
   int save_model;
   int load_model;
@@ -24,6 +25,7 @@ struct Model {
   struct Parameter param;
   struct SVMModel *svm_model;
   struct KNNModel *knn_model;
+  struct MCSVMModel *mcsvm_model;
   int num_ex;
   int num_classes;
   int num_categories;

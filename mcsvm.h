@@ -31,6 +31,7 @@ struct MCSVMModel {
 MCSVMModel *TrainMCSVM(const struct Problem *prob, const struct MCSVMParameter *param);
 double *PredictMCSVMValues(const struct MCSVMModel *model, const struct Node *x);
 int PredictMCSVM(const struct MCSVMModel *model, const struct Node *x, int *num_max_sim_score_ret);
+double PredictMCSVMMaxValue(const struct MCSVMModel *model, const struct Node *x);
 
 int SaveMCSVMModel(std::ofstream &model_file, const struct MCSVMModel *model);
 MCSVMModel *LoadMCSVMModel(std::ifstream &model_file);

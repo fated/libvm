@@ -38,6 +38,11 @@ int main(int argc, char *argv[]) {
     param.svm_param->kernel_param->gamma = 1.0 / train->max_index;
   }
 
+  if ((param.taxonomy_type == MCSVM_EL) &&
+      param.mcsvm_param->kernel_param->gamma == 0) {
+    param.mcsvm_param->kernel_param->gamma = 1.0 / train->max_index;
+  }
+
   std::ofstream output_file(output_file_name);
   if (!output_file.is_open()) {
     std::cerr << "Unable to open output file: " << output_file_name << std::endl;
@@ -171,6 +176,7 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
   param.probability = 0;
   param.knn_param = new KNNParameter;
   param.svm_param = NULL;
+  param.mcsvm_param = NULL;
   InitKNNParam(param.knn_param);
 
   for (i = 1; i < argc; ++i) {
@@ -188,6 +194,12 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
           delete param.knn_param;
           param.svm_param = new SVMParameter;
           InitSVMParam(param.svm_param);
+        }
+        if (param.taxonomy_type == MCSVM_EL) {
+          FreeKNNParam(param.knn_param);
+          delete param.knn_param;
+          param.mcsvm_param = new MCSVMParameter;
+          InitMCSVMParam(param.mcsvm_param);
         }
         break;
       }
@@ -218,6 +230,10 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
       case 'b': {
         ++i;
         param.probability = std::atoi(argv[i]);
+        break;
+      }
+      case 'q': {
+        SetPrintNull();
         break;
       }
       case 'p': {
@@ -293,10 +309,6 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
               }
               break;
             }
-            case 'q': {
-              SetPrintNull();
-              break;
-            }
             case 'w': {  // weights [option]: '-w1' means weight of '1'
               ++i;
               ++param.svm_param->num_weights;
@@ -309,6 +321,87 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
             }
             default: {
               std::cerr << "Unknown SVM option: " << argv[i] << std::endl;
+              ExitWithHelp();
+            }
+          }
+        }
+        break;
+      }
+      case 'm': {
+        if (argv[i][2]) {
+          switch (argv[i][2]) {
+            case 's': {
+              ++i;
+              if (param.mcsvm_param != NULL) {
+                param.mcsvm_param->redopt_type = std::atoi(argv[i]);
+              }
+              break;
+            }
+            case 't': {
+              ++i;
+              if (param.mcsvm_param != NULL) {
+                param.mcsvm_param->kernel_param->kernel_type = std::atoi(argv[i]);
+              }
+              break;
+            }
+            case 'd': {
+              ++i;
+              if (param.mcsvm_param != NULL) {
+                param.mcsvm_param->kernel_param->degree = std::atoi(argv[i]);
+              }
+              break;
+            }
+            case 'g': {
+              ++i;
+              if (param.mcsvm_param != NULL) {
+                param.mcsvm_param->kernel_param->gamma = std::atof(argv[i]);
+              }
+              break;
+            }
+            case 'r': {
+              ++i;
+              if (param.mcsvm_param != NULL) {
+                param.mcsvm_param->kernel_param->coef0 = std::atof(argv[i]);
+              }
+              break;
+            }
+            case 'b': {
+              ++i;
+              if (param.mcsvm_param != NULL) {
+                param.mcsvm_param->beta = std::atof(argv[i]);
+              }
+              break;
+            }
+            case 'm': {
+              ++i;
+              if (param.mcsvm_param != NULL) {
+                param.mcsvm_param->cache_size = std::atoi(argv[i]);
+              }
+              break;
+            }
+            case 'w': {
+              ++i;
+              if (param.mcsvm_param != NULL) {
+                param.mcsvm_param->delta = std::atof(argv[i]);
+              }
+              break;
+            }
+            case 'e': {
+              ++i;
+              if (param.mcsvm_param != NULL) {
+                param.mcsvm_param->epsilon = std::atof(argv[i]);
+              }
+              break;
+            }
+            case 'z': {
+              ++i;
+              if (param.mcsvm_param != NULL) {
+                param.mcsvm_param->epsilon0 = std::atof(argv[i]);
+              }
+              break;
+            }
+            default: {
+              std::cerr << "Unknown MCSVM option: " << argv[i] << std::endl;
               ExitWithHelp();
             }
           }

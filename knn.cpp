@@ -262,6 +262,11 @@ void FreeKNNModel(struct KNNModel *model) {
     model->label_neighbors = NULL;
   }
 
+  if (model != NULL) {
+    delete model;
+    model = NULL;
+  }
+
   return;
 }
 

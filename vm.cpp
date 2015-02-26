@@ -48,6 +48,35 @@ int GetEqualLengthCategory(double combined_decision_values, int num_categories, 
   return category;
 }
 
+double *GetEqualLengthCategoryForMCSVM(double *combined_decision_values, int *categories, int num_categories, int num_ex) {
+  double *points = new double[num_categories];
+  double min_cdv = combined_decision_values[0];
+  double max_cdv = combined_decision_values[0];
+
+  for (int i = 1; i < num_ex; ++i) {
+    if (combined_decision_values[i] < min_cdv) {
+      min_cdv = combined_decision_values[i];
+    }
+    if (combined_decision_values[i] > max_cdv) {
+      max_cdv = combined_decision_values[i];
+    }
+  }
+
+  double interval = (max_cdv - min_cdv) / num_categories;
+  for (int i = 0; i < num_categories; ++i) {
+    points[i] = (i+1) * interval;
+  }
+
+  for (int i = 0; i < num_ex; ++i) {
+    categories[i] = static_cast<int>((combined_decision_values[i] - min_cdv) / interval);
+    if (categories[i] >= num_categories) {
+      categories[i] = num_categories - 1;
+    }
+  }
+
+  return points;
+}
+
 double *GetEqualSizeCategory(double *combined_decision_values, int *categories, int num_categories, int num_ex) {
   double *points = new double[num_categories];
   size_t *index = new size_t[num_ex];
@@ -259,9 +288,10 @@ Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
     }
 
     if (param->taxonomy_type == MCSVM_EL) {
-      for (int i = 0; i < num_ex; ++i) {
-        categories[i] = GetEqualLengthCategory(combined_decision_values[i], num_categories, num_classes);
-      }
+      double *points;
+      points = GetEqualLengthCategoryForMCSVM(combined_decision_values, categories, num_categories, num_ex);
+      clone(model->points, points, num_categories);
+      delete[] points;
     }
 
     delete[] combined_decision_values;
@@ -426,7 +456,16 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
 
       double combined_decision_values = PredictMCSVMMaxValue(model->mcsvm_model, x);
       if (param.taxonomy_type == MCSVM_EL) {
-        categories[num_ex] = GetEqualLengthCategory(combined_decision_values, num_categories, num_classes);
+        int j;
+        for (j = 0; j < num_categories; ++j) {
+          if (combined_decision_values <= model->points[j]) {
+            categories[num_ex] = j;
+            break;
+          }
+        }
+        if (j == num_categories) {
+          categories[num_ex] = num_categories - 1;
+        }
       }
 
       for (int j = 0; j < num_ex; ++j) {
@@ -918,7 +957,8 @@ int SaveModel(const char *model_file_name, const struct Model *model) {
   }
 
   if ((param.taxonomy_type == SVM_ES ||
-       param.taxonomy_type == SVM_KM) &&
+       param.taxonomy_type == SVM_KM ||
+       param.taxonomy_type == MCSVM_EL) &&
       model->points) {
     model_file << "points\n";
     for (int i = 0; i < model->num_categories; ++i) {
@@ -1076,7 +1116,9 @@ void FreeModel(struct Model *model) {
     model->labels = NULL;
   }
 
-  if (model->param.taxonomy_type == SVM_ES &&
+  if ((model->param.taxonomy_type == SVM_ES ||
+       model->param.taxonomy_type == SVM_KM ||
+       model->param.taxonomy_type == MCSVM_EL) &&
       model->points != NULL) {
     delete[] model->points;
     model->points = NULL;

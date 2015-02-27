@@ -1825,7 +1825,6 @@ void InitSVMParam(struct SVMParameter *param) {
   param->num_weights = 0;
   param->weight_labels = NULL;
   param->weights = NULL;
-  SetPrintCout();
 
   return;
 }

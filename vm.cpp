@@ -300,14 +300,13 @@ Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
     clone(model->labels, model->svm_model->labels, num_classes);
   }
 
-  if (param->taxonomy_type == MCSVM_EL) {
+  if (param->taxonomy_type == MCSVM ||
+      param->taxonomy_type == MCSVM_EL) {
     int num_categories = param->num_categories;
     int *categories = new int[num_ex];
-    double *combined_decision_values = new double[num_ex];
 
     for (int i = 0; i < num_ex; ++i) {
       categories[i] = -1;
-      combined_decision_values[i] = 0;
     }
 
     model->mcsvm_model = TrainMCSVM(train, param->mcsvm_param);
@@ -315,24 +314,39 @@ Model *TrainVM(const struct Problem *train, const struct Parameter *param) {
     int num_classes = model->mcsvm_model->num_classes;
     if (num_classes == 1) {
       std::cerr << "WARNING: training set only has one class. See README for details." << std::endl;
+      num_categories = num_classes;
     }
-    if (num_classes > 2 && num_categories < num_classes) {
-      std::cerr << "WARNING: number of categories should be the same as number of classes in Multi-Class case. See README for details." << std::endl;
+    if (num_classes > 1 && num_categories != num_classes) {
       num_categories = num_classes;
     }
 
-    for (int i = 0; i < num_ex; ++i) {
-      combined_decision_values[i] = PredictMCSVMMaxValue(model->mcsvm_model, train->x[i]);
+    if (param->taxonomy_type == MCSVM) {
+      for (int i = 0; i < num_ex; ++i) {
+        int temp;
+        int label = PredictMCSVM(model->mcsvm_model, train->x[i], &temp);
+
+        for (int j = 0; j < num_classes; ++j) {
+          if (label == model->mcsvm_model->labels[j]) {
+            categories[i] = j;
+            break;
+          }
+        }
+      }
     }
 
     if (param->taxonomy_type == MCSVM_EL) {
+      double *combined_decision_values = new double[num_ex];
+      for (int i = 0; i < num_ex; ++i) {
+        combined_decision_values[i] = PredictMCSVMMaxValue(model->mcsvm_model, train->x[i]);
+      }
+
       double *points;
       points = GetEqualLengthCategoryForMCSVM(combined_decision_values, categories, num_categories, num_ex);
       clone(model->points, points, num_categories);
       delete[] points;
+      delete[] combined_decision_values;
     }
 
-    delete[] combined_decision_values;
     model->num_classes = num_classes;
     model->num_ex = num_ex;
     model->categories = categories;
@@ -512,7 +526,8 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
     }
   }
 
-  if (param.taxonomy_type == MCSVM_EL) {
+  if (param.taxonomy_type == MCSVM ||
+      param.taxonomy_type == MCSVM_EL) {
     for (int i = 0; i < num_classes; ++i) {
       int *categories = new int[num_ex+1];
       f_matrix[i] = new int[num_classes];
@@ -525,11 +540,22 @@ double PredictVM(const struct Problem *train, const struct Model *model, const s
       }
       categories[num_ex] = -1;
 
-      double combined_decision_values = PredictMCSVMMaxValue(model->mcsvm_model, x);
+      if (param.taxonomy_type == MCSVM) {
+        int temp;
+        int label = PredictMCSVM(model->mcsvm_model, x, &temp);
+        for (int j = 0; j < num_classes; ++j) {
+          if (label == labels[j]) {
+            categories[num_ex] = j;
+            break;
+          }
+        }
+      }
+
       if (param.taxonomy_type == MCSVM_EL) {
+        double combined_decision_value = PredictMCSVMMaxValue(model->mcsvm_model, x);
         int j;
         for (j = 0; j < num_categories; ++j) {
-          if (combined_decision_values <= model->points[j]) {
+          if (combined_decision_value <= model->points[j]) {
             categories[num_ex] = j;
             break;
           }
@@ -960,8 +986,9 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
   if (param->taxonomy_type == SVM_EL ||
       param->taxonomy_type == SVM_ES ||
       param->taxonomy_type == SVM_KM ||
-      param->taxonomy_type == MCSVM_EL ||
-      param->taxonomy_type == OVA_SVM) {
+      param->taxonomy_type == OVA_SVM ||
+      param->taxonomy_type == MCSVM ||
+      param->taxonomy_type == MCSVM_EL) {
     Problem subprob;
     subprob.x = new Node*[num_ex];
     subprob.y = new double[num_ex];
@@ -987,12 +1014,12 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
           brier[i] += avg_prob[j] * avg_prob[j];
         }
       }
-      if (param->probability == 1) {
-        for (int j = 0; j < submodel->num_classes; ++j) {
-          std::cout << avg_prob[j] << ' ';
-        }
-        std::cout << '\n';
-      }
+      // if (param->probability == 1) {
+      //   for (int j = 0; j < submodel->num_classes; ++j) {
+      //     std::cout << avg_prob[j] << ' ';
+      //   }
+      //   std::cout << '\n';
+      // }
       FreeModel(submodel);
       delete[] avg_prob;
     }
@@ -1003,7 +1030,7 @@ void OnlinePredict(const struct Problem *prob, const struct Parameter *param,
   return;
 }
 
-static const char *kTaxonomyTypeTable[] = { "knn", "svm_el", "svm_es", "svm_km", "mcsvm_el", "ova_svm", NULL };
+static const char *kTaxonomyTypeTable[] = { "knn", "svm_el", "svm_es", "svm_km", "ova_svm", "mcsvm", "mcsvm_el", NULL };
 
 int SaveModel(const char *model_file_name, const struct Model *model) {
   std::ofstream model_file(model_file_name);
@@ -1026,7 +1053,8 @@ int SaveModel(const char *model_file_name, const struct Model *model) {
       param.taxonomy_type == OVA_SVM) {
     SaveSVMModel(model_file, model->svm_model);
   }
-  if (param.taxonomy_type == MCSVM_EL) {
+  if (param.taxonomy_type == MCSVM ||
+      param.taxonomy_type == MCSVM_EL) {
     SaveMCSVMModel(model_file, model->mcsvm_model);
   }
 
@@ -1180,7 +1208,8 @@ void FreeModel(struct Model *model) {
     model->svm_model = NULL;
   }
 
-  if ((model->param.taxonomy_type == MCSVM_EL) &&
+  if ((model->param.taxonomy_type == MCSVM ||
+       model->param.taxonomy_type == MCSVM_EL) &&
       model->mcsvm_model != NULL) {
     FreeMCSVMModel(model->mcsvm_model);
     model->mcsvm_model = NULL;
@@ -1225,7 +1254,8 @@ void FreeParam(struct Parameter *param) {
     param->svm_param = NULL;
   }
 
-  if ((param->taxonomy_type == MCSVM_EL) &&
+  if ((param->taxonomy_type == MCSVM ||
+       param->taxonomy_type == MCSVM_EL) &&
       param->mcsvm_param != NULL) {
     FreeMCSVMParam(param->mcsvm_param);
     param->mcsvm_param = NULL;
@@ -1262,7 +1292,8 @@ const char *CheckParameter(const struct Parameter *param) {
     }
   }
 
-  if (param->taxonomy_type == MCSVM_EL) {
+  if (param->taxonomy_type == MCSVM ||
+      param->taxonomy_type == MCSVM_EL) {
     if (param->mcsvm_param == NULL) {
       return "no mcsvm parameter";
     } else if (CheckMCSVMParameter(param->mcsvm_param) != NULL) {
@@ -1270,7 +1301,7 @@ const char *CheckParameter(const struct Parameter *param) {
     }
   }
 
-  if (param->taxonomy_type > 5) {
+  if (param->taxonomy_type > 6) {
     return "no such taxonomy type";
   }
 

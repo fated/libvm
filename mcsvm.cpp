@@ -435,7 +435,9 @@ Spoc::Spoc(const Problem *prob, const MCSVMParameter *param, int *y, int num_cla
      iteration_(12),
      num_ex_(prob->num_ex),
      num_classes_(num_classes),
+     next_p_list_(0),
      y_(y),
+     max_psi_(0),
      beta_(param->beta) {
 
   Info("\nOptimizer (SPOC) ... start\n");

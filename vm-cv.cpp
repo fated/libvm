@@ -27,10 +27,18 @@ int main(int argc, char *argv[]) {
 
   prob = ReadProblem(data_file_name);
 
-  if (param.taxonomy_type == SVM_EL ||
-      param.taxonomy_type == SVM_ES ||
-      param.taxonomy_type == SVM_KM) {
-    param.svm_param->gamma = 1.0 / prob->max_index;
+  if ((param.taxonomy_type == SVM_EL ||
+       param.taxonomy_type == SVM_ES ||
+       param.taxonomy_type == SVM_KM ||
+       param.taxonomy_type == OVA_SVM) &&
+      param.svm_param->kernel_param->gamma == 0) {
+    param.svm_param->kernel_param->gamma = 1.0 / prob->max_index;
+  }
+
+  if ((param.taxonomy_type == MCSVM ||
+       param.taxonomy_type == MCSVM_EL) &&
+      param.mcsvm_param->kernel_param->gamma == 0) {
+    param.mcsvm_param->kernel_param->gamma = 1.0 / prob->max_index;
   }
 
   std::ofstream output_file(output_file_name);
@@ -96,13 +104,18 @@ void ExitWithHelp() {
             << "    1 -- support vector machine with equal length (SVM_EL)\n"
             << "    2 -- support vector machine with equal size (SVM_ES)\n"
             << "    3 -- support vector machine with k-means clustering (SVM_KM)\n"
+            << "    4 -- one-vs-all support vector machine (OVA_SVM)\n"
+            << "    5 -- Crammer and Singer's multi-class support vector machine (MCSVM)\n"
+            << "    6 -- Crammer and Singer's multi-class support vector machine with equal length (MCSVM_EL)\n"
             << "  -k num_neighbors : set number of neighbors in kNN (default 1)\n"
             << "  -c num_categories : set number of categories for Venn predictor (default 4)\n"
             << "  -v num_folds : set number of folders in cross validation (default 5)\n"
+            << "  -q : turn off quiet mode (no outputs)\n"
             << "  -p : prefix of options to set parameters for SVM\n"
             << "    -ps svm_type : set type of SVM (default 0)\n"
             << "      0 -- C-SVC    (multi-class classification)\n"
             << "      1 -- nu-SVC   (multi-class classification)\n"
+            << "      2 -- OVA-SVC  (multi-class classification)\n"
             << "    -pt kernel_type : set type of kernel function (default 2)\n"
             << "      0 -- linear: u'*v\n"
             << "      1 -- polynomial: (gamma*u'*v + coef0)^degree\n"
@@ -118,7 +131,25 @@ void ExitWithHelp() {
             << "    -pe epsilon : set tolerance of termination criterion (default 0.001)\n"
             << "    -ph shrinking : whether to use the shrinking heuristics, 0 or 1 (default 1)\n"
             << "    -pwi weights : set the parameter C of class i to weight*C, for C-SVC (default 1)\n"
-            << "    -pq : quiet mode (no outputs)\n";
+            << "  -m : prefix of options to set parameters for MCSVM\n"
+            << "    -ms redopt_type : set type of reduced optimization (default 0)\n"
+            << "      0 -- exact (EXACT)\n"
+            << "      1 -- approximate (APPROX)\n"
+            << "      2 -- binary (BINARY)\n"
+            << "    -mt kernel_type : set type of kernel function (default 2)\n"
+            << "      0 -- linear: u'*v\n"
+            << "      1 -- polynomial: (gamma*u'*v + coef0)^degree\n"
+            << "      2 -- radial basis function: exp(-gamma*|u-v|^2)\n"
+            << "      3 -- sigmoid: tanh(gamma*u'*v + coef0)\n"
+            << "      4 -- precomputed kernel (kernel values in training_set_file)\n"
+            << "    -md degree : set degree in kernel function (default 3)\n"
+            << "    -mg gamma : set gamma in kernel function (default 1/num_features)\n"
+            << "    -mr coef0 : set coef0 in kernel function (default 0)\n"
+            << "    -mb beta : set margin (default 1e-4)\n"
+            << "    -mw delta : set approximation tolerance for approximate method (default 1e-4)\n"
+            << "    -mm cachesize : set cache memory size in MB (default 100)\n"
+            << "    -me epsilon : set tolerance of termination criterion (default 1e-3)\n"
+            << "    -mz epsilon0 : set initialize margin (default 1-1e-6)\n";
   exit(EXIT_FAILURE);
 }
 
@@ -129,9 +160,12 @@ void ParseCommandLine(int argc, char **argv, char *data_file_name, char *output_
   param.load_model = 0;
   param.num_categories = 4;
   param.num_folds = 5;
+  param.probability = 0;
   param.knn_param = new KNNParameter;
   param.svm_param = NULL;
+  param.mcsvm_param = NULL;
   InitKNNParam(param.knn_param);
+  SetPrintNull();
 
   for (i = 1; i < argc; ++i) {
     if (argv[i][0] != '-') break;
@@ -143,17 +177,30 @@ void ParseCommandLine(int argc, char **argv, char *data_file_name, char *output_
         param.taxonomy_type = std::atoi(argv[i]);
         if (param.taxonomy_type == SVM_EL ||
             param.taxonomy_type == SVM_ES ||
-            param.taxonomy_type == SVM_KM) {
+            param.taxonomy_type == SVM_KM ||
+            param.taxonomy_type == OVA_SVM) {
           FreeKNNParam(param.knn_param);
           delete param.knn_param;
           param.svm_param = new SVMParameter;
           InitSVMParam(param.svm_param);
+          if (param.taxonomy_type == OVA_SVM) {
+            param.svm_param->svm_type = OVA_SVC;
+          }
+        }
+        if (param.taxonomy_type == MCSVM ||
+            param.taxonomy_type == MCSVM_EL) {
+          FreeKNNParam(param.knn_param);
+          delete param.knn_param;
+          param.mcsvm_param = new MCSVMParameter;
+          InitMCSVMParam(param.mcsvm_param);
         }
         break;
       }
       case 'k': {
         ++i;
-        param.knn_param->num_neighbors = std::atoi(argv[i]);
+        if (param.knn_param != NULL) {
+          param.knn_param->num_neighbors = std::atoi(argv[i]);
+        }
         break;
       }
       case 'c': {
@@ -170,61 +217,90 @@ void ParseCommandLine(int argc, char **argv, char *data_file_name, char *output_
         }
         break;
       }
+      case 'b': {
+        ++i;
+        param.probability = std::atoi(argv[i]);
+        break;
+      }
+      case 'q': {
+        SetPrintCout();
+        break;
+      }
       case 'p': {
         if (argv[i][2]) {
           switch (argv[i][2]) {
             case 's': {
               ++i;
-              param.svm_param->svm_type = std::atoi(argv[i]);
+              if (param.svm_param != NULL) {
+                param.svm_param->svm_type = std::atoi(argv[i]);
+                if (param.taxonomy_type == OVA_SVM && param.svm_param->svm_type != OVA_SVC) {
+                  std::cerr << "SVM type should be one-vs-all SVM for taxonomy OVA_SVM" << std::endl;
+                  ExitWithHelp();
+                }
+              }
               break;
             }
             case 't': {
               ++i;
-              param.svm_param->kernel_type = std::atoi(argv[i]);
+              if (param.svm_param != NULL) {
+                param.svm_param->kernel_param->kernel_type = std::atoi(argv[i]);
+              }
               break;
             }
             case 'd': {
               ++i;
-              param.svm_param->degree = std::atoi(argv[i]);
+              if (param.svm_param != NULL) {
+                param.svm_param->kernel_param->degree = std::atoi(argv[i]);
+              }
               break;
             }
             case 'g': {
               ++i;
-              param.svm_param->gamma = std::atof(argv[i]);
+              if (param.svm_param != NULL) {
+                param.svm_param->kernel_param->gamma = std::atof(argv[i]);
+              }
               break;
             }
             case 'r': {
               ++i;
-              param.svm_param->coef0 = std::atof(argv[i]);
+              if (param.svm_param != NULL) {
+                param.svm_param->kernel_param->coef0 = std::atof(argv[i]);
+              }
               break;
             }
             case 'n': {
               ++i;
-              param.svm_param->nu = std::atof(argv[i]);
+              if (param.svm_param != NULL) {
+                param.svm_param->nu = std::atof(argv[i]);
+              }
               break;
             }
             case 'm': {
               ++i;
-              param.svm_param->cache_size = std::atof(argv[i]);
+              if (param.svm_param != NULL) {
+                param.svm_param->cache_size = std::atof(argv[i]);
+              }
               break;
             }
             case 'c': {
               ++i;
-              param.svm_param->C = std::atof(argv[i]);
+              if (param.svm_param != NULL) {
+                param.svm_param->C = std::atof(argv[i]);
+              }
               break;
             }
             case 'e': {
               ++i;
-              param.svm_param->eps = std::atof(argv[i]);
+              if (param.svm_param != NULL) {
+                param.svm_param->eps = std::atof(argv[i]);
+              }
               break;
             }
             case 'h': {
               ++i;
-              param.svm_param->shrinking = std::atoi(argv[i]);
-              break;
-            }
-            case 'q': {
-              SetPrintNull();
+              if (param.svm_param != NULL) {
+                param.svm_param->shrinking = std::atoi(argv[i]);
+              }
               break;
             }
             case 'w': {  // weights [option]: '-w1' means weight of '1'
@@ -239,6 +315,87 @@ void ParseCommandLine(int argc, char **argv, char *data_file_name, char *output_
             }
             default: {
               std::cerr << "Unknown SVM option: " << argv[i] << std::endl;
+              ExitWithHelp();
+            }
+          }
+        }
+        break;
+      }
+      case 'm': {
+        if (argv[i][2]) {
+          switch (argv[i][2]) {
+            case 's': {
+              ++i;
+              if (param.mcsvm_param != NULL) {
+                param.mcsvm_param->redopt_type = std::atoi(argv[i]);
+              }
+              break;
+            }
+            case 't': {
+              ++i;
+              if (param.mcsvm_param != NULL) {
+                param.mcsvm_param->kernel_param->kernel_type = std::atoi(argv[i]);
+              }
+              break;
+            }
+            case 'd': {
+              ++i;
+              if (param.mcsvm_param != NULL) {
+                param.mcsvm_param->kernel_param->degree = std::atoi(argv[i]);
+              }
+              break;
+            }
+            case 'g': {
+              ++i;
+              if (param.mcsvm_param != NULL) {
+                param.mcsvm_param->kernel_param->gamma = std::atof(argv[i]);
+              }
+              break;
+            }
+            case 'r': {
+              ++i;
+              if (param.mcsvm_param != NULL) {
+                param.mcsvm_param->kernel_param->coef0 = std::atof(argv[i]);
+              }
+              break;
+            }
+            case 'b': {
+              ++i;
+              if (param.mcsvm_param != NULL) {
+                param.mcsvm_param->beta = std::atof(argv[i]);
+              }
+              break;
+            }
+            case 'm': {
+              ++i;
+              if (param.mcsvm_param != NULL) {
+                param.mcsvm_param->cache_size = std::atoi(argv[i]);
+              }
+              break;
+            }
+            case 'w': {
+              ++i;
+              if (param.mcsvm_param != NULL) {
+                param.mcsvm_param->delta = std::atof(argv[i]);
+              }
+              break;
+            }
+            case 'e': {
+              ++i;
+              if (param.mcsvm_param != NULL) {
+                param.mcsvm_param->epsilon = std::atof(argv[i]);
+              }
+              break;
+            }
+            case 'z': {
+              ++i;
+              if (param.mcsvm_param != NULL) {
+                param.mcsvm_param->epsilon0 = std::atof(argv[i]);
+              }
+              break;
+            }
+            default: {
+              std::cerr << "Unknown MCSVM option: " << argv[i] << std::endl;
               ExitWithHelp();
             }
           }

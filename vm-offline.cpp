@@ -33,7 +33,8 @@ int main(int argc, char *argv[]) {
 
   if ((param.taxonomy_type == SVM_EL ||
        param.taxonomy_type == SVM_ES ||
-       param.taxonomy_type == SVM_KM) &&
+       param.taxonomy_type == SVM_KM ||
+       param.taxonomy_type == OVA_SVM) &&
       param.svm_param->kernel_param->gamma == 0) {
     param.svm_param->kernel_param->gamma = 1.0 / train->max_index;
   }
@@ -139,6 +140,8 @@ void ExitWithHelp() {
             << "    1 -- support vector machine with equal length (SVM_EL)\n"
             << "    2 -- support vector machine with equal size (SVM_ES)\n"
             << "    3 -- support vector machine with k-means clustering (SVM_KM)\n"
+            << "    4 -- Crammer and Singer's multi-class support vector machine (MCSVM_EL)\n"
+            << "    5 -- one-vs-all support vector machine (OVA_SVM)\n"
             << "  -k num_neighbors : set number of neighbors in kNN (default 1)\n"
             << "  -c num_categories : set number of categories for Venn predictor (default 4)\n"
             << "  -s model_file_name : save model\n"
@@ -148,6 +151,7 @@ void ExitWithHelp() {
             << "    -ps svm_type : set type of SVM (default 0)\n"
             << "      0 -- C-SVC    (multi-class classification)\n"
             << "      1 -- nu-SVC   (multi-class classification)\n"
+            << "      2 -- OVA-SVC  (multi-class classification)\n"
             << "    -pt kernel_type : set type of kernel function (default 2)\n"
             << "      0 -- linear: u'*v\n"
             << "      1 -- polynomial: (gamma*u'*v + coef0)^degree\n"
@@ -163,7 +167,7 @@ void ExitWithHelp() {
             << "    -pe epsilon : set tolerance of termination criterion (default 0.001)\n"
             << "    -ph shrinking : whether to use the shrinking heuristics, 0 or 1 (default 1)\n"
             << "    -pwi weights : set the parameter C of class i to weight*C, for C-SVC (default 1)\n"
-            << "    -pq : quiet mode (no outputs)\n";
+            << "  -q : quiet mode (no outputs)\n";
   exit(EXIT_FAILURE);
 }
 
@@ -189,11 +193,15 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
         param.taxonomy_type = std::atoi(argv[i]);
         if (param.taxonomy_type == SVM_EL ||
             param.taxonomy_type == SVM_ES ||
-            param.taxonomy_type == SVM_KM) {
+            param.taxonomy_type == SVM_KM ||
+            param.taxonomy_type == OVA_SVM) {
           FreeKNNParam(param.knn_param);
           delete param.knn_param;
           param.svm_param = new SVMParameter;
           InitSVMParam(param.svm_param);
+          if (param.taxonomy_type == OVA_SVM) {
+            param.svm_param->svm_type = OVA_SVC;
+          }
         }
         if (param.taxonomy_type == MCSVM_EL) {
           FreeKNNParam(param.knn_param);
@@ -243,6 +251,10 @@ void ParseCommandLine(int argc, char **argv, char *train_file_name, char *test_f
               ++i;
               if (param.svm_param != NULL) {
                 param.svm_param->svm_type = std::atoi(argv[i]);
+                if (param.taxonomy_type == OVA_SVM && param.svm_param->svm_type != OVA_SVC) {
+                  std::cerr << "SVM type should be one-vs-all SVM for taxonomy OVA_SVM" << std::endl;
+                  ExitWithHelp();
+                }
               }
               break;
             }

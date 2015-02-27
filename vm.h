@@ -7,7 +7,7 @@
 #include "svm.h"
 #include "mcsvm.h"
 
-enum { KNN, SVM_EL, SVM_ES, SVM_KM, MCSVM_EL};
+enum { KNN, SVM_EL, SVM_ES, SVM_KM, MCSVM_EL, OVA_SVM};
 
 struct Parameter {
   struct KNNParameter *knn_param;

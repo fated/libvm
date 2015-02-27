@@ -2,25 +2,30 @@
 #define LIBVM_VM_H_
 
 #include "utilities.h"
+#include "kernel.h"
 #include "knn.h"
 #include "svm.h"
+#include "mcsvm.h"
 
-enum { KNN, SVM_EL, SVM_ES, SVM_KM };
+enum { KNN, SVM_EL, SVM_ES, SVM_KM, MCSVM_EL, OVA_SVM};
 
 struct Parameter {
   struct KNNParameter *knn_param;
   struct SVMParameter *svm_param;
+  struct MCSVMParameter *mcsvm_param;
   int num_categories;
   int save_model;
   int load_model;
   int taxonomy_type;
   int num_folds;
+  int probability;
 };
 
 struct Model {
   struct Parameter param;
   struct SVMModel *svm_model;
   struct KNNModel *knn_model;
+  struct MCSVMModel *mcsvm_model;
   int num_ex;
   int num_classes;
   int num_categories;

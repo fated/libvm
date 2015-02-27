@@ -3,341 +3,11 @@
 #include <iostream>
 #include <fstream>
 #include <iomanip>
-#include <cstdarg>
 #include <string>
 #include <vector>
 #include <exception>
 
-typedef float Qfloat;
 typedef signed char schar;
-
-static void PrintCout(const char *s) {
-  std::cout << s;
-  std::cout.flush();
-}
-
-static void PrintNull(const char *s) {}
-
-static void (*PrintString) (const char *) = &PrintNull;
-
-static void Info(const char *format, ...) {
-  char buffer[BUFSIZ];
-  va_list ap;
-  va_start(ap, format);
-  vsprintf(buffer, format, ap);
-  va_end(ap);
-  (*PrintString)(buffer);
-}
-
-//
-// Kernel Cache
-//
-// l is the number of total data items
-// size is the cache size limit in bytes
-//
-class Cache {
- public:
-  Cache(int l, long int size);
-  ~Cache();
-
-  // request data [0,len)
-  // return some position p where [p,len) need to be filled
-  // (p >= len if nothing needs to be filled)
-  int get_data(const int index, Qfloat **data, int len);
-  void SwapIndex(int i, int j);
-
- private:
-  int l_;
-  long int size_;
-  struct Head {
-    Head *prev, *next;  // a circular list
-    Qfloat *data;
-    int len;  // data[0,len) is cached in this entry
-  };
-
-  Head *head_;
-  Head lru_head_;
-  void DeleteLRU(Head *h);
-  void InsertLRU(Head *h);
-};
-
-Cache::Cache(int l, long int size) : l_(l), size_(size) {
-  head_ = (Head *)calloc(static_cast<size_t>(l_), sizeof(Head));  // initialized to 0
-  size_ /= sizeof(Qfloat);
-  size_ -= static_cast<unsigned long>(l_) * sizeof(Head) / sizeof(Qfloat);
-  size_ = std::max(size_, 2 * static_cast<long int>(l_));  // cache must be large enough for two columns
-  lru_head_.next = lru_head_.prev = &lru_head_;
-}
-
-Cache::~Cache() {
-  for (Head *h = lru_head_.next; h != &lru_head_; h=h->next) {
-    delete[] h->data;
-  }
-  delete[] head_;
-}
-
-void Cache::DeleteLRU(Head *h) {
-  // delete from current location
-  h->prev->next = h->next;
-  h->next->prev = h->prev;
-}
-
-void Cache::InsertLRU(Head *h) {
-  // insert to last position
-  h->next = &lru_head_;
-  h->prev = lru_head_.prev;
-  h->prev->next = h;
-  h->next->prev = h;
-}
-
-int Cache::get_data(const int index, Qfloat **data, int len) {
-  Head *h = &head_[index];
-  if (h->len) {
-    DeleteLRU(h);
-  }
-  int more = len - h->len;
-
-  if (more > 0) {
-    // free old space
-    while (size_ < more) {
-      Head *old = lru_head_.next;
-      DeleteLRU(old);
-      delete[] old->data;
-      size_ += old->len;
-      old->data = 0;
-      old->len = 0;
-    }
-
-    // allocate new space
-    h->data = (Qfloat *)realloc(h->data, sizeof(Qfloat)*static_cast<unsigned long>(len));
-    size_ -= more;
-    std::swap(h->len, len);
-  }
-
-  InsertLRU(h);
-  *data = h->data;
-
-  return len;
-}
-
-void Cache::SwapIndex(int i, int j) {
-  if (i == j) {
-    return;
-  }
-
-  if (head_[i].len) {
-    DeleteLRU(&head_[i]);
-  }
-  if (head_[j].len) {
-    DeleteLRU(&head_[j]);
-  }
-  std::swap(head_[i].data, head_[j].data);
-  std::swap(head_[i].len, head_[j].len);
-  if (head_[i].len) {
-    InsertLRU(&head_[i]);
-  }
-  if (head_[j].len) {
-    InsertLRU(&head_[j]);
-  }
-
-  if (i > j) {
-    std::swap(i, j);
-  }
-  for (Head *h = lru_head_.next; h != &lru_head_; h = h->next) {
-    if (h->len > i) {
-      if (h->len > j) {
-        std::swap(h->data[i], h->data[j]);
-      } else {
-        // give up
-        DeleteLRU(h);
-        delete[] h->data;
-        size_ += h->len;
-        h->data = 0;
-        h->len = 0;
-      }
-    }
-  }
-}
-
-//
-// Kernel evaluation
-//
-// the static method KernelFunction is for doing single kernel evaluation
-// the constructor of Kernel prepares to calculate the l*l kernel matrix
-// the member function get_Q is for getting one column from the Q Matrix
-//
-class QMatrix {
- public:
-  virtual Qfloat *get_Q(int column, int len) const = 0;
-  virtual double *get_QD() const = 0;
-  virtual void SwapIndex(int i, int j) const = 0;
-  virtual ~QMatrix() {}
-};
-
-class Kernel : public QMatrix {
- public:
-  Kernel(int l, Node *const *x, const SVMParameter& param);
-  virtual ~Kernel();
-  static double KernelFunction(const Node *x, const Node *y, const SVMParameter& param);
-  virtual Qfloat *get_Q(int column, int len) const = 0;
-  virtual double *get_QD() const = 0;
-  virtual void SwapIndex(int i, int j) const {
-    std::swap(x_[i], x_[j]);
-    if (x_square_) {
-      std::swap(x_square_[i], x_square_[j]);
-    }
-  }
-
- protected:
-  double (Kernel::*kernel_function)(int i, int j) const;
-
- private:
-  const Node **x_;
-  double *x_square_;
-
-  // SVMParameter
-  const int kernel_type;
-  const int degree;
-  const double gamma;
-  const double coef0;
-
-  static double Dot(const Node *px, const Node *py);
-  double KernelLinear(int i, int j) const {
-    return Dot(x_[i], x_[j]);
-  }
-  double KernelPoly(int i, int j) const {
-    return std::pow(gamma*Dot(x_[i], x_[j])+coef0, degree);
-  }
-  double KernelRBF(int i, int j) const {
-    return exp(-gamma*(x_square_[i]+x_square_[j]-2*Dot(x_[i], x_[j])));
-  }
-  double KernelSigmoid(int i, int j) const {
-    return tanh(gamma*Dot(x_[i], x_[j])+coef0);
-  }
-  double KernelPrecomputed(int i, int j) const {
-    return x_[i][static_cast<int>(x_[j][0].value)].value;
-  }
-};
-
-Kernel::Kernel(int l, Node *const *x, const SVMParameter &param)
-    :kernel_type(param.kernel_type),
-     degree(param.degree),
-     gamma(param.gamma),
-     coef0(param.coef0) {
-  switch (kernel_type) {
-    case LINEAR: {
-      kernel_function = &Kernel::KernelLinear;
-      break;
-    }
-    case POLY: {
-      kernel_function = &Kernel::KernelPoly;
-      break;
-    }
-    case RBF: {
-      kernel_function = &Kernel::KernelRBF;
-      break;
-    }
-    case SIGMOID: {
-      kernel_function = &Kernel::KernelSigmoid;
-      break;
-    }
-    case PRECOMPUTED: {
-      kernel_function = &Kernel::KernelPrecomputed;
-      break;
-    }
-    default: {
-      // assert(false);
-      break;
-    }
-  }
-
-  clone(x_, x, l);
-
-  if (kernel_type == RBF) {
-    x_square_ = new double[l];
-    for (int i = 0; i < l; ++i) {
-      x_square_[i] = Dot(x_[i], x_[i]);
-    }
-  } else {
-    x_square_ = 0;
-  }
-}
-
-Kernel::~Kernel() {
-  delete[] x_;
-  delete[] x_square_;
-}
-
-double Kernel::Dot(const Node *px, const Node *py) {
-  double sum = 0;
-  while (px->index != -1 && py->index != -1) {
-    if (px->index == py->index) {
-      sum += px->value * py->value;
-      ++px;
-      ++py;
-    } else {
-      if (px->index > py->index) {
-        ++py;
-      } else {
-        ++px;
-      }
-    }
-  }
-
-  return sum;
-}
-
-double Kernel::KernelFunction(const Node *x, const Node *y, const SVMParameter &param) {
-  switch (param.kernel_type) {
-    case LINEAR: {
-      return Dot(x, y);
-    }
-    case POLY: {
-      return std::pow(param.gamma*Dot(x, y)+param.coef0, param.degree);
-    }
-    case RBF: {
-      double sum = 0;
-      while (x->index != -1 && y->index != -1) {
-        if (x->index == y->index) {
-          double d = x->value - y->value;
-          sum += d*d;
-          ++x;
-          ++y;
-        } else {
-          if (x->index > y->index) {
-            sum += y->value * y->value;
-            ++y;
-          } else {
-            sum += x->value * x->value;
-            ++x;
-          }
-        }
-      }
-
-      while (x->index != -1) {
-        sum += x->value * x->value;
-        ++x;
-      }
-
-      while (y->index != -1) {
-        sum += y->value * y->value;
-        ++y;
-      }
-
-      return exp(-param.gamma*sum);
-    }
-    case SIGMOID: {
-      return tanh(param.gamma*Dot(x, y)+param.coef0);
-    }
-    case PRECOMPUTED: {  //x: test (validation), y: SV
-      return x[static_cast<int>(y->value)].value;
-    }
-    default: {
-      // assert(false);
-      return 0;  // Unreachable
-    }
-  }
-}
 
 // An SMO algorithm in Fan et al., JMLR 6(2005), p. 1889--1918
 // Solves:
@@ -1175,7 +845,7 @@ double Solver_NU::CalculateRho() {
 //
 class SVC_Q : public Kernel {
  public:
-  SVC_Q(const Problem &prob, const SVMParameter &param, const schar *y) : Kernel(prob.num_ex, prob.x, param) {
+  SVC_Q(const Problem &prob, const SVMParameter &param, const schar *y) : Kernel(prob.num_ex, prob.x, param.kernel_param) {
     clone(y_, y, prob.num_ex);
     cache_ = new Cache(prob.num_ex, static_cast<long int>(param.cache_size*(1<<20)));
     QD_ = new double[prob.num_ex];
@@ -1235,7 +905,7 @@ static void SolveCSVC(const Problem *prob, const SVMParameter *param, double *al
   }
 
   Solver s;
-  s.Solve(num_ex, SVC_Q(*prob, *param,y), minus_ones, y, alpha, Cp, Cn, param->eps, si, param->shrinking);
+  s.Solve(num_ex, SVC_Q(*prob, *param, y), minus_ones, y, alpha, Cp, Cn, param->eps, si, param->shrinking);
 
   double sum_alpha=0;
   for (int i = 0; i < num_ex; ++i) {
@@ -1288,7 +958,7 @@ static void SolveNuSVC(const Problem *prob, const SVMParameter *param, double *a
   }
 
   Solver_NU s;
-  s.Solve(num_ex, SVC_Q(*prob, *param,y), zeros, y, alpha, 1.0, 1.0, param->eps, si, param->shrinking);
+  s.Solve(num_ex, SVC_Q(*prob, *param, y), zeros, y, alpha, 1.0, 1.0, param->eps, si, param->shrinking);
   double r = si->r;
 
   Info("C = %f\n", 1/r);
@@ -1319,6 +989,10 @@ static DecisionFunction TrainSingleSVM(const Problem *prob, const SVMParameter *
   Solver::SolutionInfo si;
   switch (param->svm_type) {
     case C_SVC: {
+      SolveCSVC(prob, param, alpha, &si, Cp, Cn);
+      break;
+    }
+    case OVA_SVC: {
       SolveCSVC(prob, param, alpha, &si, Cp, Cn);
       break;
     }
@@ -1366,7 +1040,6 @@ static DecisionFunction TrainSingleSVM(const Problem *prob, const SVMParameter *
 SVMModel *TrainSVM(const Problem *prob, const SVMParameter *param) {
   SVMModel *model = new SVMModel;
   model->param = *param;
-  model->free_sv = 0;  // XXX
 
   // classification
   int num_ex = prob->num_ex;
@@ -1405,128 +1078,242 @@ SVMModel *TrainSVM(const Problem *prob, const SVMParameter *param) {
       weighted_C[j] *= param->weights[i];
     }
   }
-
-  // train k*(k-1)/2 models
   bool *non_zero = new bool[num_ex];
   for (int i = 0; i < num_ex; ++i) {
     non_zero[i] = false;
   }
-  DecisionFunction *f = new DecisionFunction[num_classes*(num_classes-1)/2];
 
-  int p = 0;
-  for (int i = 0; i < num_classes; ++i) {
-    for (int j = i+1; j < num_classes; ++j) {
-      Problem sub_prob;
-      int si = start[i], sj = start[j];
-      int ci = count[i], cj = count[j];
-      sub_prob.num_ex = ci+cj;
-      sub_prob.x = new Node*[sub_prob.num_ex];
-      sub_prob.y = new double[sub_prob.num_ex];
-      for (int k = 0; k < ci; ++k) {
-        sub_prob.x[k] = x[si+k];
-        sub_prob.y[k] = +1;
-      }
-      for (int k = 0; k < cj; ++k) {
-        sub_prob.x[ci+k] = x[sj+k];
-        sub_prob.y[ci+k] = -1;
-      }
+  if (param->svm_type == C_SVC ||
+      param->svm_type == NU_SVC) {
+    // train k*(k-1)/2 models
+    DecisionFunction *f = new DecisionFunction[num_classes*(num_classes-1)/2];
 
-      f[p] = TrainSingleSVM(&sub_prob, param,weighted_C[i], weighted_C[j]);
-      for (int k = 0; k < ci; ++k) {
-        if (!non_zero[si+k] && fabs(f[p].alpha[k]) > 0) {
-          non_zero[si+k] = true;
+    int p = 0;
+    for (int i = 0; i < num_classes; ++i) {
+      for (int j = i+1; j < num_classes; ++j) {
+        Problem sub_prob;
+        int si = start[i], sj = start[j];
+        int ci = count[i], cj = count[j];
+        sub_prob.num_ex = ci+cj;
+        sub_prob.x = new Node*[sub_prob.num_ex];
+        sub_prob.y = new double[sub_prob.num_ex];
+        for (int k = 0; k < ci; ++k) {
+          sub_prob.x[k] = x[si+k];
+          sub_prob.y[k] = +1;
+        }
+        for (int k = 0; k < cj; ++k) {
+          sub_prob.x[ci+k] = x[sj+k];
+          sub_prob.y[ci+k] = -1;
+        }
+
+        f[p] = TrainSingleSVM(&sub_prob, param,weighted_C[i], weighted_C[j]);
+        for (int k = 0; k < ci; ++k) {
+          if (!non_zero[si+k] && fabs(f[p].alpha[k]) > 0) {
+            non_zero[si+k] = true;
+          }
+        }
+        for (int k = 0; k < cj; ++k) {
+          if (!non_zero[sj+k] && fabs(f[p].alpha[ci+k]) > 0) {
+            non_zero[sj+k] = true;
+          }
+        }
+        delete[] sub_prob.x;
+        delete[] sub_prob.y;
+        ++p;
+      }
+    }
+
+    // build output
+    model->num_classes = num_classes;
+    model->num_ex = num_ex;
+
+    model->labels = new int[num_classes];
+    for (int i = 0; i < num_classes; ++i) {
+      model->labels[i] = labels[i];
+    }
+
+    model->rho = new double[num_classes*(num_classes-1)/2];
+    for (int i = 0; i < num_classes*(num_classes-1)/2; ++i) {
+      model->rho[i] = f[i].rho;
+    }
+
+    int total_sv = 0;
+    int *nz_count = new int[num_classes];
+    model->num_svs = new int[num_classes];
+    for (int i = 0; i < num_classes; ++i) {
+      int num_svs = 0;
+      for (int j = 0; j < count[i]; ++j) {
+        if (non_zero[start[i]+j]) {
+          ++num_svs;
+          ++total_sv;
         }
       }
-      for (int k = 0; k < cj; ++k) {
-        if (!non_zero[sj+k] && fabs(f[p].alpha[ci+k]) > 0) {
-          non_zero[sj+k] = true;
+      model->num_svs[i] = num_svs;
+      nz_count[i] = num_svs;
+    }
+
+    Info("Total nSV = %d\n", total_sv);
+
+    model->total_sv = total_sv;
+    model->svs = new Node*[total_sv];
+    model->sv_indices = new int[total_sv];
+    p = 0;
+    for (int i = 0; i < num_ex; ++i) {
+      if (non_zero[i]) {
+        model->svs[p] = x[i];
+        model->sv_indices[p] = perm[i] + 1;
+        ++p;
+      }
+    }
+
+    int *nz_start = new int[num_classes];
+    nz_start[0] = 0;
+    for (int i = 1; i < num_classes; ++i) {
+      nz_start[i] = nz_start[i-1]+nz_count[i-1];
+    }
+
+    model->sv_coef = new double*[num_classes-1];
+    for (int i = 0; i < num_classes-1; ++i) {
+      model->sv_coef[i] = new double[total_sv];
+    }
+
+    p = 0;
+    for (int i = 0; i < num_classes; ++i) {
+      for (int j = i+1; j < num_classes; ++j) {
+        // classifier (i,j): coefficients with
+        // i are in sv_coef[j-1][nz_start[i]...],
+        // j are in sv_coef[i][nz_start[j]...]
+        int si = start[i];
+        int sj = start[j];
+        int ci = count[i];
+        int cj = count[j];
+
+        int q = nz_start[i];
+        for (int k = 0; k < ci; ++k) {
+          if (non_zero[si+k]) {
+            model->sv_coef[j-1][q++] = f[p].alpha[k];
+          }
+        }
+        q = nz_start[j];
+        for (int k = 0; k < cj; ++k) {
+          if (non_zero[sj+k]) {
+            model->sv_coef[i][q++] = f[p].alpha[ci+k];
+          }
+        }
+        ++p;
+      }
+    }
+
+    for (int i = 0; i < num_classes*(num_classes-1)/2; ++i) {
+      delete[] f[i].alpha;
+    }
+    delete[] f;
+    delete[] nz_count;
+    delete[] nz_start;
+
+  } else if (param->svm_type == OVA_SVC) {
+    // train k models
+    DecisionFunction *f = new DecisionFunction[num_classes];
+
+    for (int i = 0; i < num_classes; ++i) {
+      Problem sub_prob;
+      int si = start[i];
+      int ci = count[i];
+      sub_prob.num_ex = num_ex;
+      sub_prob.x = new Node*[sub_prob.num_ex];
+      sub_prob.y = new double[sub_prob.num_ex];
+      for (int j = 0; j < si; ++j) {
+        sub_prob.x[j] = x[j];
+        sub_prob.y[j] = -1;
+      }
+      for (int j = 0; j < ci; ++j) {
+        sub_prob.x[si+j] = x[si+j];
+        sub_prob.y[si+j] = +1;
+      }
+      for (int j = si+ci; j < num_ex; ++j) {
+        sub_prob.x[j] = x[j];
+        sub_prob.y[j] = -1;
+      }
+      double nega_weight = param->C * ci / (num_ex - ci);
+      f[i] = TrainSingleSVM(&sub_prob, param, weighted_C[i], nega_weight);
+      for (int j = 0; j < num_ex; ++j) {
+        if (!non_zero[j] && fabs(f[i].alpha[j]) > 0) {
+          non_zero[j] = true;
         }
       }
       delete[] sub_prob.x;
       delete[] sub_prob.y;
-      ++p;
     }
-  }
 
-  // build output
-  model->num_classes = num_classes;
-  model->num_ex = num_ex;
+    // build output
+    model->num_classes = num_classes;
+    model->num_ex = num_ex;
 
-  model->labels = new int[num_classes];
-  for (int i = 0; i < num_classes; ++i) {
-    model->labels[i] = labels[i];
-  }
-
-  model->rho = new double[num_classes*(num_classes-1)/2];
-  for (int i = 0; i < num_classes*(num_classes-1)/2; ++i) {
-    model->rho[i] = f[i].rho;
-  }
-
-  int total_sv = 0;
-  int *nz_count = new int[num_classes];
-  model->num_svs = new int[num_classes];
-  for (int i = 0; i < num_classes; ++i) {
-    int num_svs = 0;
-    for (int j = 0; j < count[i]; ++j) {
-      if (non_zero[start[i]+j]) {
-        ++num_svs;
-        ++total_sv;
-      }
+    model->labels = new int[num_classes];
+    for (int i = 0; i < num_classes; ++i) {
+      model->labels[i] = labels[i];
     }
-    model->num_svs[i] = num_svs;
-    nz_count[i] = num_svs;
-  }
 
-  Info("Total nSV = %d\n", total_sv);
-
-  model->total_sv = total_sv;
-  model->svs = new Node*[total_sv];
-  model->sv_indices = new int[total_sv];
-  p = 0;
-  for (int i = 0; i < num_ex; ++i) {
-    if (non_zero[i]) {
-      model->svs[p] = x[i];
-      model->sv_indices[p] = perm[i] + 1;
-      ++p;
+    model->rho = new double[num_classes];
+    for (int i = 0; i < num_classes; ++i) {
+      model->rho[i] = f[i].rho;
     }
-  }
 
-  int *nz_start = new int[num_classes];
-  nz_start[0] = 0;
-  for (int i = 1; i < num_classes; ++i) {
-    nz_start[i] = nz_start[i-1]+nz_count[i-1];
-  }
-
-  model->sv_coef = new double*[num_classes-1];
-  for (int i = 0; i < num_classes-1; ++i) {
-    model->sv_coef[i] = new double[total_sv];
-  }
-
-  p = 0;
-  for (int i = 0; i < num_classes; ++i) {
-    for (int j = i+1; j < num_classes; ++j) {
-      // classifier (i,j): coefficients with
-      // i are in sv_coef[j-1][nz_start[i]...],
-      // j are in sv_coef[i][nz_start[j]...]
-      int si = start[i];
-      int sj = start[j];
-      int ci = count[i];
-      int cj = count[j];
-
-      int q = nz_start[i];
-      for (int k = 0; k < ci; ++k) {
-        if (non_zero[si+k]) {
-          model->sv_coef[j-1][q++] = f[p].alpha[k];
+    int total_sv = 0;
+    int *nz_count = new int[num_classes];
+    model->num_svs = new int[num_classes];
+    for (int i = 0; i < num_classes; ++i) {
+      int num_svs = 0;
+      for (int j = 0; j < count[i]; ++j) {
+        if (non_zero[start[i]+j]) {
+          ++num_svs;
+          ++total_sv;
         }
       }
-      q = nz_start[j];
-      for (int k = 0; k < cj; ++k) {
-        if (non_zero[sj+k]) {
-          model->sv_coef[i][q++] = f[p].alpha[ci+k];
+      model->num_svs[i] = num_svs;
+      nz_count[i] = num_svs;
+    }
+
+    Info("Total nSV = %d\n", total_sv);
+
+    model->total_sv = total_sv;
+    model->svs = new Node*[total_sv];
+    model->sv_indices = new int[total_sv];
+    int p = 0;
+    for (int i = 0; i < num_ex; ++i) {
+      if (non_zero[i]) {
+        model->svs[p] = x[i];
+        model->sv_indices[p] = perm[i] + 1;
+        ++p;
+      }
+    }
+
+    int *nz_start = new int[num_classes];
+    nz_start[0] = 0;
+    for (int i = 1; i < num_classes; ++i) {
+      nz_start[i] = nz_start[i-1]+nz_count[i-1];
+    }
+
+    model->sv_coef = new double*[num_classes];
+    for (int i = 0; i < num_classes; ++i) {
+      model->sv_coef[i] = new double[total_sv];
+    }
+
+    for (int i = 0; i < num_classes; ++i) {
+      int q = 0;
+      for (int j = 0; j < num_ex; ++j) {
+        if (non_zero[j]) {
+          model->sv_coef[i][q++] = f[i].alpha[j];
         }
       }
-      ++p;
     }
+
+    for (int i = 0; i < num_classes; ++i) {
+      delete[] f[i].alpha;
+    }
+    delete[] f;
+    delete[] nz_count;
+    delete[] nz_start;
   }
 
   delete[] labels;
@@ -1536,12 +1323,6 @@ SVMModel *TrainSVM(const Problem *prob, const SVMParameter *param) {
   delete[] x;
   delete[] weighted_C;
   delete[] non_zero;
-  for (int i = 0; i < num_classes*(num_classes-1)/2; ++i) {
-    delete[] f[i].alpha;
-  }
-  delete[] f;
-  delete[] nz_count;
-  delete[] nz_start;
 
   return model;
 }
@@ -1549,75 +1330,102 @@ SVMModel *TrainSVM(const Problem *prob, const SVMParameter *param) {
 double PredictSVMValues(const SVMModel *model, const Node *x, double *decision_values) {
   int num_classes = model->num_classes;
   int total_sv = model->total_sv;
+  int best_idx = 0;
 
   double *kvalue = new double[total_sv];
   for (int i = 0; i < total_sv; ++i) {
-    kvalue[i] = Kernel::KernelFunction(x, model->svs[i], model->param);
+    kvalue[i] = Kernel::KernelFunction(x, model->svs[i], model->param.kernel_param);
   }
 
-  int *start = new int[num_classes];
-  start[0] = 0;
-  for (int i = 1; i < num_classes; ++i) {
-    start[i] = start[i-1] + model->num_svs[i-1];
-  }
-
-  int *vote = new int[num_classes];
-  for (int i = 0; i < num_classes; ++i) {
-    vote[i] = 0;
-  }
-
-  int p = 0;
-  for (int i = 0; i < num_classes; ++i) {
-    for (int j = i+1; j < num_classes; ++j) {
-      double sum = 0;
-      int si = start[i];
-      int sj = start[j];
-      int ci = model->num_svs[i];
-      int cj = model->num_svs[j];
-
-      double *coef1 = model->sv_coef[j-1];
-      double *coef2 = model->sv_coef[i];
-      for (int k = 0; k < ci; ++k) {
-        sum += coef1[si+k] * kvalue[si+k];
-      }
-      for (int k = 0; k < cj; ++k) {
-        sum += coef2[sj+k] * kvalue[sj+k];
-      }
-      sum -= model->rho[p];
-      decision_values[p] = sum;
-
-      if (decision_values[p] > 0) {
-        ++vote[i];
-      } else {
-        ++vote[j];
-      }
-      ++p;
+  if (model->param.svm_type == C_SVC ||
+      model->param.svm_type == NU_SVC) {
+    int *start = new int[num_classes];
+    start[0] = 0;
+    for (int i = 1; i < num_classes; ++i) {
+      start[i] = start[i-1] + model->num_svs[i-1];
     }
-  }
 
-  int vote_max_idx = 0;
-  for (int i = 1; i < num_classes; ++i) {
-    if (vote[i] > vote[vote_max_idx]) {
-      vote_max_idx = i;
+    int *vote = new int[num_classes];
+    for (int i = 0; i < num_classes; ++i) {
+      vote[i] = 0;
+    }
+
+    int p = 0;
+    for (int i = 0; i < num_classes; ++i) {
+      for (int j = i+1; j < num_classes; ++j) {
+        double sum = 0;
+        int si = start[i];
+        int sj = start[j];
+        int ci = model->num_svs[i];
+        int cj = model->num_svs[j];
+
+        double *coef1 = model->sv_coef[j-1];
+        double *coef2 = model->sv_coef[i];
+        for (int k = 0; k < ci; ++k) {
+          sum += coef1[si+k] * kvalue[si+k];
+        }
+        for (int k = 0; k < cj; ++k) {
+          sum += coef2[sj+k] * kvalue[sj+k];
+        }
+        sum -= model->rho[p];
+        decision_values[p] = sum;
+
+        if (decision_values[p] > 0) {
+          ++vote[i];
+        } else {
+          ++vote[j];
+        }
+        ++p;
+      }
+    }
+
+    for (int i = 1; i < num_classes; ++i) {
+      if (vote[i] > vote[best_idx]) {
+        best_idx = i;
+      }
+    }
+
+    delete[] vote;
+    delete[] start;
+
+  } else if (model->param.svm_type == OVA_SVC) {
+
+    double max_decision_value = -kInf;
+    for (int i = 0; i < num_classes; ++i) {
+      double sum = 0;
+      double *coef = model->sv_coef[i];
+      for (int j = 0; j < total_sv; ++j) {
+        sum += coef[j] * kvalue[j];
+      }
+      sum -= model->rho[i];
+      decision_values[i] = sum;
+
+      if (decision_values[i] > max_decision_value) {
+        max_decision_value = decision_values[i];
+        best_idx = i;
+      }
     }
   }
 
   delete[] kvalue;
-  delete[] start;
-  delete[] vote;
 
-  return model->labels[vote_max_idx];
+  return model->labels[best_idx];
 }
 
 double PredictSVM(const SVMModel *model, const Node *x) {
   int num_classes = model->num_classes;
-  double *decision_values = new double[num_classes*(num_classes-1)/2];
+  double *decision_values;
+  if (model->param.svm_type == OVA_SVC) {
+    decision_values = new double[num_classes];
+  } else {
+    decision_values = new double[num_classes*(num_classes-1)/2];
+  }
   double pred_result = PredictSVMValues(model, x, decision_values);
   delete[] decision_values;
   return pred_result;
 }
 
-static const char *kSVMTypeTable[] = { "c_svc", "nu_svc", NULL };
+static const char *kSVMTypeTable[] = { "c_svc", "nu_svc", "ovs_svc", NULL };
 
 static const char *kKernelTypeTable[] = { "linear", "polynomial", "rbf", "sigmoid", "precomputed", NULL };
 
@@ -1626,19 +1434,19 @@ int SaveSVMModel(std::ofstream &model_file, const struct SVMModel *model) {
 
   model_file << "svm_model\n";
   model_file << "svm_type " << kSVMTypeTable[param.svm_type] << '\n';
-  model_file << "kernel_type " << kKernelTypeTable[param.kernel_type] << '\n';
+  model_file << "kernel_type " << kKernelTypeTable[param.kernel_param->kernel_type] << '\n';
 
-  if (param.kernel_type == POLY) {
-    model_file << "degree " << param.degree << '\n';
+  if (param.kernel_param->kernel_type == POLY) {
+    model_file << "degree " << param.kernel_param->degree << '\n';
   }
-  if (param.kernel_type == POLY ||
-      param.kernel_type == RBF  ||
-      param.kernel_type == SIGMOID) {
-    model_file << "gamma " << param.gamma << '\n';
+  if (param.kernel_param->kernel_type == POLY ||
+      param.kernel_param->kernel_type == RBF  ||
+      param.kernel_param->kernel_type == SIGMOID) {
+    model_file << "gamma " << param.kernel_param->gamma << '\n';
   }
-  if (param.kernel_type == POLY ||
-      param.kernel_type == SIGMOID) {
-    model_file << "coef0 " << param.coef0 << '\n';
+  if (param.kernel_param->kernel_type == POLY ||
+      param.kernel_param->kernel_type == SIGMOID) {
+    model_file << "coef0 " << param.kernel_param->coef0 << '\n';
   }
 
   int num_classes = model->num_classes;
@@ -1656,8 +1464,14 @@ int SaveSVMModel(std::ofstream &model_file, const struct SVMModel *model) {
 
   if (model->rho) {
     model_file << "rho";
-    for (int i = 0; i < num_classes*(num_classes-1)/2; ++i)
-      model_file << ' ' << model->rho[i];
+    if (param.svm_type == C_SVC ||
+        param.svm_type == NU_SVC) {
+      for (int i = 0; i < num_classes*(num_classes-1)/2; ++i)
+        model_file << ' ' << model->rho[i];
+    } else if (param.svm_type == OVA_SVC) {
+      for (int i = 0; i < num_classes; ++i)
+        model_file << ' ' << model->rho[i];
+    }
     model_file << '\n';
   }
 
@@ -1683,9 +1497,13 @@ int SaveSVMModel(std::ofstream &model_file, const struct SVMModel *model) {
     for (int j = 0; j < num_classes-1; ++j)
       model_file << std::setprecision(16) << (sv_coef[j][i]+0.0) << ' ';  // add "+0.0" to avoid negative zero in output
 
+    if (param.svm_type == OVA_SVC) {
+      model_file << std::setprecision(16) << (sv_coef[num_classes-1][i]+0.0) << ' ';
+    }
+
     const Node *p = svs[i];
 
-    if (param.kernel_type == PRECOMPUTED) {
+    if (param.kernel_param->kernel_type == PRECOMPUTED) {
       model_file << "0:" << static_cast<int>(p->value) << ' ';
     } else {
       while (p->index != -1) {
@@ -1702,6 +1520,7 @@ int SaveSVMModel(std::ofstream &model_file, const struct SVMModel *model) {
 SVMModel *LoadSVMModel(std::ifstream &model_file) {
   SVMModel *model = new SVMModel;
   SVMParameter &param = model->param;
+  param.kernel_param = new KernelParameter;
   model->rho = NULL;
   model->sv_indices = NULL;
   model->labels = NULL;
@@ -1730,7 +1549,7 @@ SVMModel *LoadSVMModel(std::ifstream &model_file) {
       int i;
       for (i = 0; kKernelTypeTable[i]; ++i) {
         if (std::strcmp(kKernelTypeTable[i], cmd) == 0) {
-          param.kernel_type = i;
+          param.kernel_param->kernel_type = i;
           break;
         }
       }
@@ -1740,13 +1559,13 @@ SVMModel *LoadSVMModel(std::ifstream &model_file) {
       }
     } else
     if (std::strcmp(cmd, "degree") == 0) {
-      model_file >> param.degree;
+      model_file >> param.kernel_param->degree;
     } else
     if (std::strcmp(cmd, "gamma") == 0) {
-      model_file >> param.gamma;
+      model_file >> param.kernel_param->gamma;
     } else
     if (std::strcmp(cmd, "coef0") == 0) {
-      model_file >> param.coef0;
+      model_file >> param.kernel_param->coef0;
     } else
     if (std::strcmp(cmd, "num_examples") == 0) {
       model_file >> model->num_ex;
@@ -1765,7 +1584,13 @@ SVMModel *LoadSVMModel(std::ifstream &model_file) {
       }
     } else
     if (std::strcmp(cmd, "rho") == 0) {
-      int n = model->num_classes*(model->num_classes-1)/2;
+      int n;
+      if (param.svm_type == C_SVC ||
+          param.svm_type == NU_SVC) {
+        n = model->num_classes*(model->num_classes-1)/2;
+      } else {
+        n = model->num_classes;
+      }
       model->rho = new double[n];
       for (int i = 0; i < n; ++i) {
         model_file >> model->rho[i];
@@ -1786,7 +1611,13 @@ SVMModel *LoadSVMModel(std::ifstream &model_file) {
       }
     } else
     if (std::strcmp(cmd, "SVs") == 0) {
-      std::size_t m = static_cast<unsigned long>(model->num_classes)-1;
+      std::size_t m;
+      if (param.svm_type == C_SVC ||
+          param.svm_type == NU_SVC) {
+        m = static_cast<size_t>(model->num_classes)-1;
+      } else {
+        m = static_cast<size_t>(model->num_classes);
+      }
       int total_sv = model->total_sv;
       std::string line;
 
@@ -1872,76 +1703,75 @@ SVMModel *LoadSVMModel(std::ifstream &model_file) {
       break;
     } else {
       std::cerr << "Unknown text in knn_model file: " << cmd << std::endl;
-      FreeSVMModel(&model);
+      FreeSVMModel(model);
       return NULL;
     }
   }
-  model->free_sv = 1;
   return model;
 }
 
-void FreeSVMModelContent(SVMModel *model) {
-  if (model->free_sv && model->total_sv > 0 && model->svs != NULL) {
-    delete[] model->svs;
-    model->svs = NULL;
-  }
-
-  if (model->sv_coef) {
-    for (int i = 0; i < model->num_classes-1; ++i)
+void FreeSVMModel(SVMModel* model)
+{
+  if (model->sv_coef != NULL) {
+    for (int i = 0; i < model->num_classes-1; ++i) {
       delete[] model->sv_coef[i];
-  }
-
-  if (model->svs) {
-    delete[] model->svs;
-    model->svs = NULL;
-  }
-
-  if (model->sv_coef) {
+    }
+    if (model->param.svm_type == OVA_SVC) {
+      delete[] model->sv_coef[model->num_classes-1];
+    }
     delete[] model->sv_coef;
     model->sv_coef = NULL;
   }
 
-  if (model->rho) {
+  if (model->svs != NULL) {
+    delete[] model->svs;
+    model->svs = NULL;
+  }
+
+  if (model->rho != NULL) {
     delete[] model->rho;
     model->rho = NULL;
   }
 
-  if (model->labels) {
+  if (model->labels != NULL) {
     delete[] model->labels;
     model->labels= NULL;
   }
 
-  if (model->sv_indices) {
+  if (model->sv_indices != NULL) {
     delete[] model->sv_indices;
     model->sv_indices = NULL;
   }
 
-  if (model->num_svs) {
+  if (model->num_svs != NULL) {
     delete[] model->num_svs;
     model->num_svs = NULL;
   }
-}
 
-void FreeSVMModel(SVMModel** model)
-{
-  if (model != NULL && *model != NULL) {
-    FreeSVMModelContent(*model);
-    delete *model;
-    *model = NULL;
+  if (model != NULL) {
+    delete model;
+    model = NULL;
   }
 
   return;
 }
 
 void FreeSVMParam(SVMParameter* param) {
-  if (param->weight_labels) {
+  if (param->weight_labels != NULL) {
     delete[] param->weight_labels;
     param->weight_labels = NULL;
   }
-  if (param->weights) {
+
+  if (param->weights != NULL) {
     delete[] param->weights;
     param->weights = NULL;
   }
+
+  if (param->kernel_param != NULL) {
+    delete param->kernel_param;
+    param->kernel_param = NULL;
+  }
+
   delete param;
   param = NULL;
 
@@ -1949,24 +1779,17 @@ void FreeSVMParam(SVMParameter* param) {
 }
 
 const char *CheckSVMParameter(const SVMParameter *param) {
+  if (param->kernel_param == NULL) {
+    return "no kernel parameter";
+  } else if (CheckKernelParameter(param->kernel_param) != NULL) {
+    return CheckKernelParameter(param->kernel_param);
+  }
+
   int svm_type = param->svm_type;
   if (svm_type != C_SVC &&
-      svm_type != NU_SVC)
+      svm_type != NU_SVC &&
+      svm_type != OVA_SVC)
     return "unknown svm type";
-
-  int kernel_type = param->kernel_type;
-  if (kernel_type != LINEAR &&
-      kernel_type != POLY &&
-      kernel_type != RBF &&
-      kernel_type != SIGMOID &&
-      kernel_type != PRECOMPUTED)
-    return "unknown kernel type";
-
-  if (param->gamma < 0)
-    return "gamma < 0";
-
-  if (param->degree < 0)
-    return "degree of polynomial kernel < 0";
 
   if (param->cache_size <= 0)
     return "cache_size <= 0";
@@ -1974,7 +1797,8 @@ const char *CheckSVMParameter(const SVMParameter *param) {
   if (param->eps <= 0)
     return "eps <= 0";
 
-  if (svm_type == C_SVC)
+  if (svm_type == C_SVC ||
+      svm_type == OVA_SVC)
     if (param->C <= 0)
       return "C <= 0";
 
@@ -1990,11 +1814,9 @@ const char *CheckSVMParameter(const SVMParameter *param) {
 }
 
 void InitSVMParam(struct SVMParameter *param) {
+  param->kernel_param = new KernelParameter;
+  InitKernelParam(param->kernel_param);
   param->svm_type = C_SVC;
-  param->kernel_type = RBF;
-  param->degree = 3;
-  param->gamma = 0.1;  // 1/num_features
-  param->coef0 = 0;
   param->nu = 0.5;
   param->cache_size = 100;
   param->C = 1;
@@ -2006,12 +1828,4 @@ void InitSVMParam(struct SVMParameter *param) {
   SetPrintCout();
 
   return;
-}
-
-void SetPrintNull() {
-  PrintString = &PrintNull;
-}
-
-void SetPrintCout() {
-  PrintString = &PrintCout;
 }
